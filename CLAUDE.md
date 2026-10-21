@@ -56,7 +56,7 @@ targets (the time selection, from the start of the item plus the offset). `Curve
   notes can also get shorter, not only longer); the start stays, the length never goes below one tick.
 - pitch: "shift" (-12..+12 semitones, default) or "absolute" (a range); clamped to 0..127. No scale snap yet.
 - channel: a channel range 1..16 (rounded); mute: muted where the curve is below the threshold (or at or above it, with
-  "mute above instead of below").
+  "mute high intensity instead of low").
 Not built, on purpose: position (timing is ReaShapeM's), program change, polyphonic pressure.
 
 ## Close All (21 October 2026)

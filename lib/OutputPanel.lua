@@ -174,8 +174,8 @@ function M.draw(ctx, name, getPoints, writeEnvelope)
     _, S.chLo = reaper.ImGui_SliderInt(ctx, "Channel min##outcl", S.chLo, 1, 16)
     _, S.chHi = reaper.ImGui_SliderInt(ctx, "Channel max##outch2", S.chHi, 1, 16)
   elseif S.target == 3 and S.value == 6 then
-    _, S.threshold = reaper.ImGui_SliderInt(ctx, "Threshold %##outthr", S.threshold, 0, 100)
-    _, S.invert = reaper.ImGui_Checkbox(ctx, "Mute above instead of below##outinv", S.invert)
+    _, S.threshold = reaper.ImGui_SliderInt(ctx, "Threshold % (intensity)##outthr", S.threshold, 0, 100)
+    _, S.invert = reaper.ImGui_Checkbox(ctx, "Mute high intensity instead of low##outinv", S.invert)
   end
 
   local cur, hold = getPoints()
