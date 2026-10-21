@@ -172,44 +172,140 @@ function M.commitCC(curve, opts)
   return true, nil, item, #written
 end
 
--- ── Note velocity ───────────────────────────────────────────────────────────
+-- ── Note values ─────────────────────────────────────────────────────────────
 
--- Sets the velocity of the notes of the selected MIDI item from the curve: each note takes the value of the curve at
--- its start (the curve starts at the start of the item, one beat of the curve is one beat of the project). Notes
--- outside the length of the curve are left as they are. opts: lo, hi (the part of 1..127 the curve uses, as
--- fractions 0..1), name. Returns ok, err, item, count.
-function M.commitVelocity(curve, opts)
+-- Sets one value of the notes of the selected MIDI item from the curve. The curve starts at the start of the item (plus
+-- opts.startBeats); a note takes the value of the curve at its START, except "lift", which reads at the END of the
+-- note (the moment of the release). Notes outside the length of the curve are left alone.
+--
+-- opts.value and what goes with it:
+--   "velocity"  lo, hi        the part of 1..127 the curve uses, as fractions 0..1
+--   "lift"      lo, hi        the same, for the note-off velocity (the release velocity)
+--   "duration"  durMode       "factor": the note keeps its start and its length is multiplied by durLo..durHi
+--                             (ratios, e.g. 0.25..2: below 1 shortens, above 1 lengthens); "absolute": the length
+--                             is durLo..durHi beats; "shift": durLo..durHi beats are added to the length (negative
+--                             values shorten, positive lengthen, e.g. -0.25..+0.25)
+--   "pitch"     pitchMode     "shift": the pitch moves by pitchLo..pitchHi semitones; "absolute": the pitch is
+--                             pitchLo..pitchHi
+--   "channel"   chLo, chHi    the channel is chLo..chHi (0..15), rounded
+--   "mute"      threshold     0..1: the note is muted where the curve is below it (unmuted where it is at or above);
+--               invert        true: muted where the curve is at or above it
+-- Returns ok, err, item, count.
+
+local function noteBeat(take, baseQN, opts, ppq)
+  return reaper.MIDI_GetProjQNFromPPQPos(take, ppq) - baseQN - (opts.startBeats or 0)
+end
+
+-- Lift: the velocity of the note-off events. REAPER keeps it in the note-off message (0x8n, key, velocity), so the
+-- take's raw events are read, every note-off inside the curve gets its value, and they are written back. A note-off
+-- that is stored as a note-on with velocity 0 is turned into a real note-off to carry the value.
+local function commitLift(curve, opts, take, baseQN, item)
+  local lo = clamp01(opts.lo or 0.0)
+  local hi = clamp01(opts.hi or 1.0)
+  local ok, buf = reaper.MIDI_GetAllEvts(take, "")
+  if not ok or not buf then return false, "could not read the MIDI events of the item" end
+  local pos, abs, count = 1, 0, 0
+  local out = {}
+  while pos <= #buf do
+    local offset, flags, msg, nxt = string.unpack("<i4Bs4", buf, pos)
+    abs = abs + offset
+    local status = msg:byte(1) or 0
+    local isOff = (#msg == 3) and ((status & 0xF0) == 0x80 or ((status & 0xF0) == 0x90 and msg:byte(3) == 0))
+    if isOff then
+      local beat = noteBeat(take, baseQN, opts, abs)
+      if beat >= -1e-6 and beat <= curve.lengthBeats + 1e-6 then
+        local v = lo + Curve.eval(curve, math.max(0, beat)) * (hi - lo)
+        local vel = math.max(1, math.min(127, math.floor(v * 127 + 0.5)))
+        msg = string.char(0x80 | (status & 0x0F), msg:byte(2), vel)
+        count = count + 1
+      end
+    end
+    out[#out + 1] = string.pack("<i4Bs4", offset, flags, msg)
+    pos = nxt
+  end
+  if count == 0 then return false, "no note-off inside the curve (does the item have notes in the range?)" end
+  if not reaper.MIDI_SetAllEvts(take, table.concat(out)) then return false, "REAPER refused the changed MIDI events" end
+  return true, nil, item, count
+end
+
+local LABEL = {
+  velocity = "note velocity", lift = "note-off velocity (lift)", duration = "note duration",
+  pitch = "note pitch", channel = "note channel", mute = "note mute",
+}
+
+function M.commitNoteValue(curve, opts)
   opts = opts or {}
+  local what = opts.value or "velocity"
+  if not LABEL[what] then return false, "unknown note value: " .. tostring(what) end
   if not curve or #curve.points == 0 then return false, "nothing to write: the curve is empty" end
   local take, baseQN, item = Midi.activeTake()
   if not take then
-    return false, "select the MIDI item whose notes should get the velocity first"
+    return false, "select the MIDI item whose notes should be changed first"
   end
-  local lo = clamp01(opts.lo or 0.0)
-  local hi = clamp01(opts.hi or 1.0)
   local _, noteCount = reaper.MIDI_CountEvts(take)
   if not noteCount or noteCount == 0 then return false, "the selected MIDI item has no notes" end
 
   reaper.Undo_BeginBlock()
   reaper.PreventUIRefresh(1)
-  local changed = 0
-  for i = 0, noteCount - 1 do
-    local ok, _, _, startPPQ = reaper.MIDI_GetNote(take, i)
-    if ok then
-      local beat = reaper.MIDI_GetProjQNFromPPQPos(take, startPPQ) - baseQN - (opts.startBeats or 0)
-      if beat >= -1e-6 and beat <= curve.lengthBeats + 1e-6 then
-        local v = lo + Curve.eval(curve, math.max(0, beat)) * (hi - lo)
-        local vel = math.max(1, math.min(127, math.floor(v * 127 + 0.5)))
-        reaper.MIDI_SetNote(take, i, nil, nil, nil, nil, nil, nil, vel, true)
-        changed = changed + 1
+  local ok, err, count = true, nil, 0
+
+  if what == "lift" then
+    local o, e, _, c = commitLift(curve, opts, take, baseQN, item)
+    ok, err, count = o, e, c or 0
+  else
+    local lo = clamp01(opts.lo or 0.0)
+    local hi = clamp01(opts.hi or 1.0)
+    for i = 0, noteCount - 1 do
+      local got, _, muted, sPPQ, ePPQ, chan, pitch, vel = reaper.MIDI_GetNote(take, i)
+      if got then
+        local beat = noteBeat(take, baseQN, opts, sPPQ)
+        if beat >= -1e-6 and beat <= curve.lengthBeats + 1e-6 then
+          local c = Curve.eval(curve, math.max(0, beat))
+          if what == "velocity" then
+            local v = lo + c * (hi - lo)
+            reaper.MIDI_SetNote(take, i, nil, nil, nil, nil, nil, nil, math.max(1, math.min(127, math.floor(v * 127 + 0.5))), true)
+          elseif what == "duration" then
+            local sQN = reaper.MIDI_GetProjQNFromPPQPos(take, sPPQ)
+            local eQN = reaper.MIDI_GetProjQNFromPPQPos(take, ePPQ)
+            local dLo, dHi = opts.durLo or 0.25, opts.durHi or 2.0
+            local f = dLo + c * (dHi - dLo)
+            local oldLen = eQN - sQN
+            local newLen = (opts.durMode == "absolute") and f or (opts.durMode == "shift") and (oldLen + f) or oldLen * f
+            newLen = math.max(newLen, 1 / 960)   -- never zero
+            reaper.MIDI_SetNote(take, i, nil, nil, nil, reaper.MIDI_GetPPQPosFromProjQN(take, sQN + newLen), nil, nil, nil, true)
+          elseif what == "pitch" then
+            local pLo, pHi = opts.pitchLo or -12, opts.pitchHi or 12
+            local v = pLo + c * (pHi - pLo)
+            local np = (opts.pitchMode == "absolute") and math.floor(v + 0.5) or (pitch + math.floor(v + 0.5))
+            reaper.MIDI_SetNote(take, i, nil, nil, nil, nil, nil, math.max(0, math.min(127, np)), nil, true)
+          elseif what == "channel" then
+            local cLo, cHi = opts.chLo or 0, opts.chHi or 15
+            local ch = math.floor(cLo + c * (cHi - cLo) + 0.5)
+            reaper.MIDI_SetNote(take, i, nil, nil, nil, nil, math.max(0, math.min(15, ch)), nil, nil, true)
+          elseif what == "mute" then
+            local below = c < (opts.threshold or 0.5)
+            reaper.MIDI_SetNote(take, i, nil, (opts.invert and not below) or (not opts.invert and below), nil, nil, nil, nil, nil, true)
+          end
+          count = count + 1
+        end
       end
     end
+    reaper.MIDI_Sort(take)
   end
-  reaper.MIDI_Sort(take)
+
   reaper.PreventUIRefresh(-1)
   if item then reaper.UpdateItemInProject(item) end
-  reaper.Undo_EndBlock((opts.name or "ReaNvelopes") .. ": curve to note velocity", -1)
-  return true, nil, item, changed
+  reaper.Undo_EndBlock((opts.name or "ReaNvelopes") .. ": curve to " .. LABEL[what], -1)
+  if not ok then return false, err end
+  return true, nil, item, count
+end
+
+-- Kept for callers of the first version: the velocity of the notes.
+function M.commitVelocity(curve, opts)
+  local o = {}
+  for k, v in pairs(opts or {}) do o[k] = v end
+  o.value = "velocity"
+  return M.commitNoteValue(curve, o)
 end
 
 -- ── Parameter envelope ──────────────────────────────────────────────────────

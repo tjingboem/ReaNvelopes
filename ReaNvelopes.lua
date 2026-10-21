@@ -40,6 +40,7 @@ package.path =
 
 local Theme     = require("Theme")
 local Logger    = require("Logger")
+local ReaSnap   = require("ReaSnap_Integration")   -- window title and Close All (ReaSnap Integration Contract pieces 2, 5)
 local RAND_Tool = require("ReaNvelopes_RAND")
 local OSC_Tool  = nil
 local DRAW_Tool = nil
@@ -53,7 +54,11 @@ local function loop()
   reaper.ImGui_SetNextWindowSize(ctx, 380, 900, reaper.ImGui_Cond_FirstUseEver())
   reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_WindowBg(), Theme.hx(Theme.C_BG_MAIN))
 
-  local visible, open = reaper.ImGui_Begin(ctx, script_name, true)
+  local visible, open = reaper.ImGui_Begin(ctx, ReaSnap.windowTitle(script_name), true)
+
+  -- ReaSnap's Close All: checked outside the visible gate, so it also works while the window is collapsed.
+  if ReaSnap.shouldClose() then open = false end
+
   if visible then
     if reaper.ImGui_BeginTabBar(ctx, "ReaNvelopesTabs") then
       if reaper.ImGui_BeginTabItem(ctx, "RAND") then

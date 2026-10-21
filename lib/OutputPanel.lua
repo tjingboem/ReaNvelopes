@@ -7,8 +7,11 @@
 --                             on the selected envelope lane)
 --     2  MIDI CC / pitch bend / channel pressure   into the selected
 --                             MIDI item (or a new one at the cursor)
---     3  Note velocity        the notes of the selected MIDI item read
---                             the curve at their start
+--     3  Note value           one value of the notes of the selected MIDI
+--                             item (velocity, lift = note-off velocity,
+--                             duration, pitch, channel, mute) follows the
+--                             curve, each note reading it at its start
+--                             (lift: at its end)
 --
 --   Where in time: the time selection if there is one, otherwise
 --   the selected item (EnvWriter.getEffectiveRange). The curve is
@@ -32,10 +35,16 @@ local Logger   = require("Logger")
 local S = {
   target = 1, kind = 1, cc = 1, channel = 0,
   loPct = 0, hiPct = 100, thinPct = 0.5, clear = true,
+  value = 1,                                   -- 1 velocity, 2 lift, 3 duration, 4 pitch, 5 channel, 6 mute
+  durMode = 1, durFactorLo = 25, durFactorHi = 200, durAbsLo = 0.0625, durAbsHi = 1.0, durShiftLo = -0.25, durShiftHi = 0.25,
+  pitchMode = 1, pitchShiftLo = -12, pitchShiftHi = 12, pitchAbsLo = 36, pitchAbsHi = 84,
+  chLo = 1, chHi = 16, threshold = 50, invert = false,
 }
 M.state = S
 
-local TARGETS = "Parameter envelope (automation item)\0MIDI CC / pitch bend / pressure\0Note velocity (selected MIDI item)\0"
+local TARGETS = "Parameter envelope (automation item)\0MIDI CC / pitch bend / pressure\0Note value (selected MIDI item)\0"
+local VALUES  = "Velocity\0Velocity off (lift)\0Duration\0Pitch\0Channel\0Mute\0"
+local VALUE_KEYS = { "velocity", "lift", "duration", "pitch", "channel", "mute" }
 local KINDS   = "CC\0Pitch bend\0Channel pressure\0"
 
 -- The curve over the current range, and where in the MIDI item it starts. Returns curve, startBeats, rangeStart,
@@ -80,8 +89,18 @@ local function doCommit(name, points, writeEnvelope, hold)
     return
   end
   if S.target == 3 then
-    local ok, err, _, count = CurveOut.commitVelocity(curve, opts)
-    if ok then Logger.ok(string.format("✔ Velocity set on %d notes", count)) else Logger.error("⚠  " .. tostring(err)) end
+    opts.value     = VALUE_KEYS[S.value]
+    opts.durMode   = (S.durMode == 2) and "absolute" or (S.durMode == 3) and "shift" or "factor"
+    opts.durLo     = (S.durMode == 2) and S.durAbsLo or (S.durMode == 3) and S.durShiftLo or S.durFactorLo / 100.0
+    opts.durHi     = (S.durMode == 2) and S.durAbsHi or (S.durMode == 3) and S.durShiftHi or S.durFactorHi / 100.0
+    opts.pitchMode = (S.pitchMode == 2) and "absolute" or "shift"
+    opts.pitchLo   = (S.pitchMode == 2) and S.pitchAbsLo or S.pitchShiftLo
+    opts.pitchHi   = (S.pitchMode == 2) and S.pitchAbsHi or S.pitchShiftHi
+    opts.chLo, opts.chHi = S.chLo - 1, S.chHi - 1
+    opts.threshold, opts.invert = S.threshold / 100.0, S.invert
+    local ok, err, _, count = CurveOut.commitNoteValue(curve, opts)
+    if ok then Logger.ok(string.format("✔ %s set on %d notes", (VALUES:match("^" .. string.rep("[^%z]*%z", S.value - 1) .. "([^%z]*)%z") or "Value"), count))
+    else Logger.error("⚠  " .. tostring(err)) end
   else
     local ok, err, _, count = CurveOut.commitCC(curve, opts)
     if ok then Logger.ok(string.format("✔ %d MIDI events written", count)) else Logger.error("⚠  " .. tostring(err)) end
@@ -120,19 +139,53 @@ function M.draw(ctx, name, getPoints, writeEnvelope)
     _, disp = reaper.ImGui_SliderInt(ctx, "Channel##outch", S.channel + 1, 1, 16)
     S.channel = disp - 1
   end
-  if S.target ~= 1 then
+  if S.target == 3 then
+    _, S.value = reaper.ImGui_Combo(ctx, "Value##outvalue", S.value - 1, VALUES)
+    S.value = S.value + 1
+  end
+  if S.target == 2 or (S.target == 3 and (S.value == 1 or S.value == 2)) then
     _, S.loPct = reaper.ImGui_SliderInt(ctx, "Range low %##outlo", S.loPct, 0, 100)
     _, S.hiPct = reaper.ImGui_SliderInt(ctx, "Range high %##outhi", S.hiPct, 0, 100)
-    if S.target == 2 then
-      _, S.thinPct = reaper.ImGui_SliderDouble(ctx, "Thinning %##outthin", S.thinPct, 0.0, 5.0)
-      _, S.clear = reaper.ImGui_Checkbox(ctx, "Replace range##outclear", S.clear)
+  end
+  if S.target == 2 then
+    _, S.thinPct = reaper.ImGui_SliderDouble(ctx, "Thinning %##outthin", S.thinPct, 0.0, 5.0)
+    _, S.clear = reaper.ImGui_Checkbox(ctx, "Replace range##outclear", S.clear)
+  end
+  if S.target == 3 and S.value == 3 then
+    _, S.durMode = reaper.ImGui_Combo(ctx, "Length##outdurmode", S.durMode - 1, "Factor of the note's length\0Absolute (beats)\0Shift (+/- beats)\0")
+    S.durMode = S.durMode + 1
+    if S.durMode == 1 then
+      _, S.durFactorLo = reaper.ImGui_SliderInt(ctx, "Factor min %##outdfl", S.durFactorLo, 5, 400)
+      _, S.durFactorHi = reaper.ImGui_SliderInt(ctx, "Factor max %##outdfh", S.durFactorHi, 5, 400)
+    elseif S.durMode == 2 then
+      _, S.durAbsLo = reaper.ImGui_SliderDouble(ctx, "Length min (beats)##outdal", S.durAbsLo, 0.0078125, 4.0)
+      _, S.durAbsHi = reaper.ImGui_SliderDouble(ctx, "Length max (beats)##outdah", S.durAbsHi, 0.0078125, 4.0)
+    else
+      _, S.durShiftLo = reaper.ImGui_SliderDouble(ctx, "Shift min (beats)##outdsl", S.durShiftLo, -2.0, 2.0)
+      _, S.durShiftHi = reaper.ImGui_SliderDouble(ctx, "Shift max (beats)##outdsh", S.durShiftHi, -2.0, 2.0)
     end
+  elseif S.target == 3 and S.value == 4 then
+    _, S.pitchMode = reaper.ImGui_Combo(ctx, "Pitch##outpmode", S.pitchMode - 1, "Shift (semitones)\0Absolute\0")
+    S.pitchMode = S.pitchMode + 1
+    if S.pitchMode == 1 then
+      _, S.pitchShiftLo = reaper.ImGui_SliderInt(ctx, "Shift min##outpsl", S.pitchShiftLo, -48, 48)
+      _, S.pitchShiftHi = reaper.ImGui_SliderInt(ctx, "Shift max##outpsh", S.pitchShiftHi, -48, 48)
+    else
+      _, S.pitchAbsLo = reaper.ImGui_SliderInt(ctx, "Pitch min##outpal", S.pitchAbsLo, 0, 127)
+      _, S.pitchAbsHi = reaper.ImGui_SliderInt(ctx, "Pitch max##outpah", S.pitchAbsHi, 0, 127)
+    end
+  elseif S.target == 3 and S.value == 5 then
+    _, S.chLo = reaper.ImGui_SliderInt(ctx, "Channel min##outcl", S.chLo, 1, 16)
+    _, S.chHi = reaper.ImGui_SliderInt(ctx, "Channel max##outch2", S.chHi, 1, 16)
+  elseif S.target == 3 and S.value == 6 then
+    _, S.threshold = reaper.ImGui_SliderInt(ctx, "Threshold %##outthr", S.threshold, 0, 100)
+    _, S.invert = reaper.ImGui_Checkbox(ctx, "Mute above instead of below##outinv", S.invert)
   end
 
   local cur, hold = getPoints()
   local has_points = cur and #cur > 0
   if not has_points then reaper.ImGui_BeginDisabled(ctx) end
-  local label = (S.target == 1) and "WRITE TO ENVELOPE" or (S.target == 2) and "WRITE MIDI" or "SET VELOCITY"
+  local label = (S.target == 1) and "WRITE TO ENVELOPE" or (S.target == 2) and "WRITE MIDI" or "SET NOTE VALUES"
   if reaper.ImGui_Button(ctx, label .. "##outwrite", -1, 36) then
     commit(name, cur, writeEnvelope, hold)
   end
@@ -140,7 +193,8 @@ function M.draw(ctx, name, getPoints, writeEnvelope)
   if S.target == 2 then
     reaper.ImGui_Text(ctx, "Into the selected MIDI item, on the channel above.")
   elseif S.target == 3 then
-    reaper.ImGui_Text(ctx, "Each note of the selected MIDI item reads the curve.")
+    reaper.ImGui_Text(ctx, (S.value == 2) and "Each note's release reads the curve at its end."
+                                          or "Each note of the selected MIDI item reads the curve.")
   end
 end
 

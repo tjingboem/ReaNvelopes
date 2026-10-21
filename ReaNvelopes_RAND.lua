@@ -100,7 +100,12 @@ function RAND_Tool.drawUI(ctx)
     Widgets.drawSectionSep(ctx, dl, "OUTPUT")
     OutputPanel.draw(ctx, "ReaNvelopes: RAND",
         function() return RANDState.preview_pts end,
-        RANDWrite.generateAutomationItem)
+        function()
+            -- One undo step for the write (RANDWrite itself opens none).
+            reaper.Undo_BeginBlock()
+            RANDWrite.generateAutomationItem()
+            reaper.Undo_EndBlock("ReaNvelopes: RAND to envelope", -1)
+        end)
 
     reaper.ImGui_Dummy(ctx, 1, 2)
     RANDPanel.drawStatusBar(ctx, dl)

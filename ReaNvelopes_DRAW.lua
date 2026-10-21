@@ -1,7 +1,9 @@
 -- ============================================================
 --   ReaNvelopes_DRAW.lua
 --   Direct shape drawing, from ReaComposeM's DRAW.
---   Click to add points, drag to move, right-click to delete.
+--   Drag on an empty spot to draw a freehand stroke (it replaces the points,
+--   simplified to the Resolution), drag a point to move it, right-click a
+--   point to delete it.
 --   Its OUTPUT section sends the drawn shape to an envelope, a MIDI CC
 --   lane or note velocity.
 -- ============================================================
