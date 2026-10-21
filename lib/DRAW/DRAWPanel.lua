@@ -359,7 +359,7 @@ function M.drawShapeModePanel(ctx)
         reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonHovered(),
             T.hx(Widgets.VI_BRD, 0.35))
         reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(),
-            sel and T.hx(T.C_TXT_PRI) or T.hx(T.C_DISABLED, 0.9))
+            sel and T.hx(T.C_TXT_PRI) or T.hx(T.C_CFG_BASE, 0.85))   -- the label colours of OSC's Curve buttons
 
         if reaper.ImGui_Button(ctx, labels[i].."##dmode_"..mode, btn_w, 22) then
             S.shape_mode = mode
@@ -378,7 +378,7 @@ function M.drawResolutionPanel(ctx)
     local Slider = require("Slider")
     local avw    = select(1, reaper.ImGui_GetContentRegionAvail(ctx))
     local new_r  = Slider.drawInt(ctx, "draw_resolution", "Resolution",
-        S.resolution, 2, 32, avw, nil, 8, { sld_h=26, gap=8, alpha=1.0 })
+        S.resolution, 2, 64, avw, nil, 8, { sld_h=26, gap=8, alpha=1.0 })
     if new_r ~= S.resolution then S.resolution = new_r end
 end
 

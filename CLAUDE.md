@@ -24,6 +24,23 @@ so there is no editor here. See `~/Downloads/ReaTjingboem/CLAUDE.md` ("How the f
 - `OSCPresets/`, `RANDPresets/`, `DRAWPresets/` — preset files (looked up next to the hub script; `sync_to_reaper.sh` protects the
   live copy's presets from `--delete`).
 
+## Clean-up (21 October 2026)
+
+tjingboem: no remarks under the write button (the message window covers failures), a rounded write button, and 50 %
+more width. Done: the status line under the OUTPUT section of RAND and OSC is gone, and so are the two hint lines the
+OUTPUT section showed under the button for the MIDI and note value targets (so a successful write or a loaded preset
+gives no green message any more; only failures speak, in the message window); the write button has rounded corners
+(frame rounding 8); the hub window is 570 px wide at first (was 380) with a width range of 510 to 900 (was 340 to 600).
+The manual's section 3.2 was rewritten ("Messages") to match.
+
+## Range sliders removed (21 October 2026)
+
+The OUTPUT sliders "Range low %" and "Range high %" are gone: they were a second linear scaling applied after the
+generator's own Amplitude, Offset and Amp Range, and only for the MIDI targets (not the envelope target). The curve now
+fills the whole range of the target (CC 0..127, pitch bend, pressure, velocity and lift 1..127). To use part of a range:
+Amplitude, Offset or Amp Range in RAND and OSC, or draw inside the part in DRAW. `CurveOut` still accepts `opts.lo`
+and `opts.hi` (default 0 and 1); the panel just does not set them. The manual was changed to match.
+
 ## Note values (21 October 2026)
 
 OUTPUT target 3 is "Note value (selected MIDI item)", with a second choice, Value: Velocity, Velocity off (lift),

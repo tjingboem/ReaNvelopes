@@ -50,8 +50,8 @@ local popupText = nil   -- the message in the open popup window
 local ctx = reaper.ImGui_CreateContext(script_name)
 
 local function loop()
-  reaper.ImGui_SetNextWindowSizeConstraints(ctx, 340, 500, 600, 1400)
-  reaper.ImGui_SetNextWindowSize(ctx, 380, 900, reaper.ImGui_Cond_FirstUseEver())
+  reaper.ImGui_SetNextWindowSizeConstraints(ctx, 510, 500, 900, 1400)   -- 50 % wider than the first version (340, 600)
+  reaper.ImGui_SetNextWindowSize(ctx, 570, 900, reaper.ImGui_Cond_FirstUseEver())
   reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_WindowBg(), Theme.hx(Theme.C_BG_MAIN))
 
   local visible, open = reaper.ImGui_Begin(ctx, ReaSnap.windowTitle(script_name), true)

@@ -115,7 +115,6 @@ function OSC_Tool.drawUI(ctx)
         mods.OSCWrite.generateAutomationItem)
 
     reaper.ImGui_Dummy(ctx, 1, 2)
-    if P.drawStatusBar then P.drawStatusBar(ctx, dl) end
 end
 
 return OSC_Tool

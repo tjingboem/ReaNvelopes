@@ -34,7 +34,7 @@ local Logger   = require("Logger")
 
 local S = {
   target = 1, kind = 1, cc = 1, channel = 0,
-  loPct = 0, hiPct = 100, thinPct = 0.5, clear = true,
+  thinPct = 0.5, clear = true,
   value = 1,                                   -- 1 velocity, 2 lift, 3 duration, 4 pitch, 5 channel, 6 mute
   durMode = 1, durFactorLo = 25, durFactorHi = 200, durAbsLo = 0.0625, durAbsHi = 1.0, durShiftLo = -0.25, durShiftHi = 0.25,
   pitchMode = 1, pitchShiftLo = -12, pitchShiftHi = 12, pitchAbsLo = 36, pitchAbsHi = 84,
@@ -78,7 +78,7 @@ local function doCommit(name, points, writeEnvelope, hold)
   if not curve then Logger.error("⚠  " .. tostring(startBeats)); return end
   local opts = {
     name = name, kind = ({ "cc", "bend", "pressure" })[S.kind] or "cc", cc = S.cc, channel = S.channel,
-    thin = S.thinPct / 100.0, lo = S.loPct / 100.0, hi = S.hiPct / 100.0, clear = S.clear, startBeats = startBeats,
+    thin = S.thinPct / 100.0, clear = S.clear, startBeats = startBeats,   -- no range sliders: the curve fills the whole range of the target
     rangeStart = rangeS, rangeEnd = rangeE,
   }
   if S.target == 1 then   -- a tool without an envelope writer of its own: the generic one, into the selected lane
@@ -143,10 +143,6 @@ function M.draw(ctx, name, getPoints, writeEnvelope)
     _, S.value = reaper.ImGui_Combo(ctx, "Value##outvalue", S.value - 1, VALUES)
     S.value = S.value + 1
   end
-  if S.target == 2 or (S.target == 3 and (S.value == 1 or S.value == 2)) then
-    _, S.loPct = reaper.ImGui_SliderInt(ctx, "Range low %##outlo", S.loPct, 0, 100)
-    _, S.hiPct = reaper.ImGui_SliderInt(ctx, "Range high %##outhi", S.hiPct, 0, 100)
-  end
   if S.target == 2 then
     _, S.thinPct = reaper.ImGui_SliderDouble(ctx, "Thinning %##outthin", S.thinPct, 0.0, 5.0)
     _, S.clear = reaper.ImGui_Checkbox(ctx, "Replace range##outclear", S.clear)
@@ -186,16 +182,13 @@ function M.draw(ctx, name, getPoints, writeEnvelope)
   local has_points = cur and #cur > 0
   if not has_points then reaper.ImGui_BeginDisabled(ctx) end
   local label = (S.target == 1) and "WRITE TO ENVELOPE" or (S.target == 2) and "WRITE MIDI" or "SET NOTE VALUES"
+  reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 8)   -- round edges
   if reaper.ImGui_Button(ctx, label .. "##outwrite", -1, 36) then
     commit(name, cur, writeEnvelope, hold)
   end
+  reaper.ImGui_PopStyleVar(ctx)
   if not has_points then reaper.ImGui_EndDisabled(ctx) end
-  if S.target == 2 then
-    reaper.ImGui_Text(ctx, "Into the selected MIDI item, on the channel above.")
-  elseif S.target == 3 then
-    reaper.ImGui_Text(ctx, (S.value == 2) and "Each note's release reads the curve at its end."
-                                          or "Each note of the selected MIDI item reads the curve.")
-  end
+  -- No remarks under the button: what goes wrong is reported in the message window (see commit).
 end
 
 return M

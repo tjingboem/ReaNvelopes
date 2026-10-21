@@ -10,7 +10,7 @@ local M = {}
 -- "smooth" : bezier/spline between points
 -- "step"   : flat horizontal until next point, instant jump
 M.shape_mode   = "linear"
-M.resolution   = 8      -- target point count after freehand simplification (2–32)
+M.resolution   = 8      -- target point count after freehand simplification (2–64)
 M.freehand_pts = nil    -- raw stroke [{tn,v}] while drawing, nil when idle
 
 -- ── Control points ────────────────────────────────────────────
@@ -141,53 +141,53 @@ function M.reset()
     M.dirty      = true
 end
 
--- ── Ramer-Douglas-Peucker simplification ─────────────────────
--- Reduces a polyline to at most max_pts points while preserving shape.
-local function rdpReduce(pts, epsilon)
-    if #pts <= 2 then return pts end
-    -- Find point with max distance from line (pts[1] → pts[#pts])
-    local ax, ay = pts[1].tn, pts[1].v
-    local bx, by = pts[#pts].tn, pts[#pts].v
-    local max_d, max_i = 0, 1
+-- Distance of pts[i] from the line pts[a] -> pts[b]
+local function devFrom(pts, a, b, i)
+    local ax, ay, bx, by = pts[a].tn, pts[a].v, pts[b].tn, pts[b].v
     local dx, dy = bx - ax, by - ay
     local len2 = dx*dx + dy*dy
-    for i = 2, #pts - 1 do
-        local px, py = pts[i].tn, pts[i].v
-        local d
-        if len2 < 1e-12 then
-            d = math.sqrt((px-ax)^2 + (py-ay)^2)
-        else
-            local t = math.max(0, math.min(1, ((px-ax)*dx + (py-ay)*dy) / len2))
-            local qx, qy = ax + t*dx, ay + t*dy
-            d = math.sqrt((px-qx)^2 + (py-qy)^2)
-        end
-        if d > max_d then max_d = d; max_i = i end
-    end
-    if max_d > epsilon then
-        local left  = rdpReduce({table.unpack(pts, 1, max_i)},   epsilon)
-        local right = rdpReduce({table.unpack(pts, max_i, #pts)}, epsilon)
-        local result = {}
-        for _, p in ipairs(left)  do result[#result+1] = p end
-        for i = 2, #right do result[#result+1] = right[i] end
-        return result
-    else
-        return { pts[1], pts[#pts] }
-    end
+    local px, py = pts[i].tn, pts[i].v
+    if len2 < 1e-12 then return math.sqrt((px-ax)^2 + (py-ay)^2) end
+    local t = math.max(0, math.min(1, ((px-ax)*dx + (py-ay)*dy) / len2))
+    return math.sqrt((px - ax - t*dx)^2 + (py - ay - t*dy)^2)
 end
 
--- Commit a freehand stroke: simplify to M.resolution points and
--- replace current points (keeping anchors at 0 and 1).
+-- Commit a freehand stroke: keep exactly M.resolution points (fewer only if the
+-- stroke has fewer) and replace current points (anchors at 0 and 1).
+-- Best-first: start with the two ends, then repeatedly add the stroke point
+-- that lies farthest from the line through its neighbours. (The earlier
+-- epsilon loop dropped equal-sized peaks all at once and could jump from
+-- many points to 2.)
 function M.commitFreehand(raw_pts)
     if not raw_pts or #raw_pts < 2 then return end
-    -- Start with a small epsilon and iterate until we're near resolution
-    local target = math.max(2, math.min(32, M.resolution))
-    local epsilon = 0.001
-    local simplified = raw_pts
-    for _ = 1, 20 do
-        simplified = rdpReduce(raw_pts, epsilon)
-        if #simplified <= target then break end
-        epsilon = epsilon * 1.5
+    local target = math.max(2, math.min(64, M.resolution))
+    local n = #raw_pts
+    local keep = { [1] = true, [n] = true }
+    local kept = 2
+    -- segments { a, b, worstIdx, worstDev }
+    local function segment(a, b)
+        local wi, wd = nil, 0
+        for i = a + 1, b - 1 do
+            local d = devFrom(raw_pts, a, b, i)
+            if d > wd then wi, wd = i, d end
+        end
+        return { a, b, wi, wd }
     end
+    local segs = { segment(1, n) }
+    while kept < target do
+        local bestK, bestD = nil, 1e-9
+        for k, sg in ipairs(segs) do
+            if sg[3] and sg[4] > bestD then bestK, bestD = k, sg[4] end
+        end
+        if not bestK then break end
+        local sg = table.remove(segs, bestK)
+        keep[sg[3]] = true
+        kept = kept + 1
+        segs[#segs+1] = segment(sg[1], sg[3])
+        segs[#segs+1] = segment(sg[3], sg[2])
+    end
+    local simplified = {}
+    for i = 1, n do if keep[i] then simplified[#simplified+1] = raw_pts[i] end end
     -- Strip X-reversals: remove any point whose tn is not strictly
     -- greater than the previous one (handles Z-strokes, backtracking).
     local monotone = { simplified[1] }

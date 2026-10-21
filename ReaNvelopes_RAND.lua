@@ -108,7 +108,6 @@ function RAND_Tool.drawUI(ctx)
         end)
 
     reaper.ImGui_Dummy(ctx, 1, 2)
-    RANDPanel.drawStatusBar(ctx, dl)
 end
 
 return RAND_Tool
