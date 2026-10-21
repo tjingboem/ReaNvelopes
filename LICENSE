@@ -1,0 +1,25 @@
+Copyright (C) 2026 tjingboem Productions. All rights reserved.
+
+No license to use, copy, modify, or distribute this software has been
+granted yet. This placeholder exists only to establish the copyright
+holder; it is not a final choice of license and should be replaced once
+a license is decided on.
+
+ReaComposeM requires the following separate REAPER extensions to be
+installed (each via ReaPack) -- the script checks for all three at
+startup and refuses to run with an error message if any is missing.
+Each is under its own license; none of them is bundled with or
+distributed alongside this script, so no license text is included
+here, but their use should be mentioned wherever ReaComposeM's own
+requirements are documented:
+  - ReaImGui (MIT License, Christian Fillion) -- required
+  - js_ReaScriptAPI (Julian Sader) -- required
+  - SWS/S&M extension (Tim Payne, Jeffos, and contributors) -- required;
+    used for reading REAPER's own envelope-range preferences
+    (volume/pitch/tempo) in lib/CommonFunction/ScaleConverter.lua
+
+The two files under scales/ (48TET.scl, just_major.scl) contain only
+plain interval ratios/cents values for standard, well-known tuning
+systems (48 equal divisions of the octave; the classic 5-limit just
+intonation major scale) -- mathematical facts, not creative expression,
+and not covered by any third-party copyright.
