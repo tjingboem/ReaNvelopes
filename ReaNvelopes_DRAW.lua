@@ -74,9 +74,19 @@ function DRAW_Tool.drawUI(ctx)
     W.drawSectionSep(ctx, dl, "OUTPUT")
     mods.OutputPanel.draw(ctx, "ReaNvelopes: DRAW",
         function()
-            local pts, out = S.toSendPts(), {}
-            if #pts < 2 then return out end
-            for i, p in ipairs(pts) do out[i] = { tn = p.x, v = p.y } end
+            local out = {}
+            if #S.points < 2 then return out end
+            if S.shape_mode == "smooth" then
+                -- Smooth is a curve between the points (smoothstep), not straight lines: write the curve itself,
+                -- sampled finely (the thinning in the OUTPUT section drops what is not needed).
+                local N = 256
+                for i = 0, N do
+                    local t = i / N
+                    out[#out + 1] = { tn = t, v = S.sampleAt(t) }
+                end
+                return out
+            end
+            for i, p in ipairs(S.toSendPts()) do out[i] = { tn = p.x, v = p.y } end
             return out, (S.shape_mode == "step")   -- steps: a value is held until the next point
         end,
         nil)

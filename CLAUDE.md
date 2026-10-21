@@ -24,6 +24,13 @@ so there is no editor here. See `~/Downloads/ReaTjingboem/CLAUDE.md` ("How the f
 - `OSCPresets/`, `RANDPresets/`, `DRAWPresets/` — preset files (looked up next to the hub script; `sync_to_reaper.sh` protects the
   live copy's presets from `--delete`).
 
+## DRAW smooth (fixed 21 October 2026)
+
+DRAW's Smooth mode (smoothstep between the points, `DRAWState.sampleAt`) was ignored by the OUTPUT section: it was
+handed only the control points and wrote straight lines between them. Smooth now hands over 257 samples of the curve
+itself (the thinning in the OUTPUT section reduces them again; 25 points for a three-point shape). Linear sends the
+control points, Step sends them as a hold curve.
+
 ## Messages
 
 A failed write (no envelope selected, no time selection, no curve, an item selected that has no take FX envelope ...)
