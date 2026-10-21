@@ -57,6 +57,18 @@ handed only the control points and wrote straight lines between them. Smooth now
 itself (the thinning in the OUTPUT section reduces them again; 25 points for a three-point shape). Linear sends the
 control points, Step sends them as a hold curve.
 
+## ReaNvelopes and ReaShapeM — how they divide the work (tjingboem, 21 October 2026)
+
+ReaShapeM is more focused on a SELECTION of notes in the MIDI editor; ReaNvelopes works on the ITEM (a time range of
+it). His idea: make raw structures first with ReaNvelopes, and when the composition takes shape, finetune with ReaShapeM.
+ReaShapeM already has envelope passes for timing (warp, groove, quantize, humanize, TSB), pitch (octave redistribution,
+pitch compression/expansion, interval scaling), velocity, duration, channel and mute, with a red/yellow preview and an
+audition; ReaNvelopes' Note value target is the broad-stroke version of part of that. What only ReaNvelopes has: the
+generators (RAND, OSC, DRAW) and the parameter envelope and CC targets, and Lift (release velocity), which ReaShapeM
+does not do. Consequence: do not build more note-value operations here (no pitch compressor, no microtuning); they
+belong in ReaShapeM. A possible link, not looked at: let the generators feed ReaShapeM's envelopes. Possible small
+addition here: an option to apply a note value only to the SELECTED notes of the item.
+
 ## Manual (21 October 2026)
 
 `doc/ReaNvelopes_Manual.odt`: about 5,400 words, 21 tables, contents list. Written for users (no design reasons, no
