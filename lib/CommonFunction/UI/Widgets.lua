@@ -549,6 +549,42 @@ function M.drawSimpleContextPanel(ctx, dl, ctx_info)
   reaper.ImGui_Dummy(ctx, 1, pill_h)
 end
 
+-- ── Flip X / Flip Y pair (RAND, DRAW; same look as the OSC radar buttons) ──
+-- Two buttons side by side in the width w, at the cursor.  lit_x / lit_y light a
+-- button that stands for an ON state (RAND); pass nil for one-shot buttons (DRAW).
+-- Returns clicked_x, clicked_y.
+local _flip_hover = {}
+function M.drawFlipPair(ctx, w, lit_x, lit_y, tip_x, tip_y)
+  local gap  = 4
+  local bw   = math.floor((w - gap) / 2)
+  local out  = { false, false }
+  local defs = {
+    { "Flip X##flipx", lit_x, tip_x },
+    { "Flip Y##flipy", lit_y, tip_y },
+  }
+  for i, d in ipairs(defs) do
+    local lbl, lit, tip = d[1], d[2], d[3]
+    reaper.ImGui_PushStyleVar(ctx,   reaper.ImGui_StyleVar_FrameRounding(),    5)
+    reaper.ImGui_PushStyleVar(ctx,   reaper.ImGui_StyleVar_FrameBorderSize(),  1.0)
+    reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Button(),        T.hx(lit and "#2A4A7A" or "#1A2A4A"))
+    reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonHovered(), T.hx("#2A4A7A"))
+    reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_ButtonActive(),  T.hx("#2A4A7A"))
+    reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Text(),          T.hx("#DDDDFF", 0.95))
+    reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_Border(),        T.hx(lit and "#6A9AE0" or "#2A4A7A", lit and 0.9 or 0.5))
+    out[i] = reaper.ImGui_Button(ctx, lbl, bw, 26)
+    if tip and reaper.ImGui_IsItemHovered(ctx) then
+      _flip_hover[lbl] = _flip_hover[lbl] or reaper.time_precise()
+      if reaper.time_precise() - _flip_hover[lbl] > 0.30 then reaper.ImGui_SetTooltip(ctx, tip) end
+    else
+      _flip_hover[lbl] = nil
+    end
+    reaper.ImGui_PopStyleColor(ctx, 5)
+    reaper.ImGui_PopStyleVar(ctx, 2)
+    if i == 1 then reaper.ImGui_SameLine(ctx, nil, gap) end
+  end
+  return out[1], out[2]
+end
+
 -- ── Violet select palette (shared across all panels) ─────────
 M.VI_BG  = "#4A32A8"  -- active button fill
 M.VI_HOV = "#5C3DC8"  -- active button hover

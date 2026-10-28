@@ -248,7 +248,7 @@ function M.computeCurveScale()
 end
 
 -- ── Symmetry operations ───────────────────────────────────────
--- "Flip Amp" (was H-flip): inverts all vertices' amplitude (top↔bottom in LFO)
+-- "Flip Y" (was Flip Amp, H-flip): inverts all vertices' amplitude (top↔bottom in LFO)
 function M.applyFlipAmp()
   for i=0,S.sides-1 do
     if not S.v_offsets[i] then S.v_offsets[i]={0,0} end
@@ -257,7 +257,7 @@ function M.applyFlipAmp()
   end
 end
 
--- "Flip Time" (was V-flip): reverses temporal order of vertices (left↔right mirror)
+-- "Flip X" (was Flip Time, V-flip): reverses temporal order of vertices (left↔right mirror)
 function M.applyFlipTime()
   local N=S.sides; local snap_vr,snap_t={},{}
   for i=0,N-1 do

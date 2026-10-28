@@ -371,6 +371,14 @@ function M.drawShapeModePanel(ctx)
     end
 
     reaper.ImGui_PopStyleVar(ctx, 2)
+
+    -- Flip X / Flip Y: one-shot, they turn the drawn points (clicking twice undoes it)
+    reaper.ImGui_Dummy(ctx, 1, 4)
+    local fx, fy = Widgets.drawFlipPair(ctx, avw, nil, nil,
+        "Flip X: reverse the curve in time \n(retrograde, heights kept)",
+        "Flip Y: turn the curve upside down \n(inversion, times kept)")
+    if fx then S.flipX() end
+    if fy then S.flipY() end
 end
 
 -- ── Resolution slider ─────────────────────────────────────────

@@ -16,6 +16,8 @@ M.shape       = 0           -- shape id 0-5 = fixed shape, 6 = random per point
 M.tension     = 0.0         -- bezier tension [-1,1]; active only when shape==5 or random picks bezier
 M.amp_range   = 1           -- index into GeneratorConfig.AMP_RANGES (1-based)
 M.amp_free    = true        -- true = free amplitude, false = quantized
+M.flip_x      = false       -- retrograde: the finished curve runs backwards
+M.flip_y      = false       -- inversion: the finished curve is turned over inside its range
 M.quant_steps = 4           -- quantization levels (visible but inactive when amp_free=true)
 
 -- ── Preview cache ─────────────────────────────────────────────

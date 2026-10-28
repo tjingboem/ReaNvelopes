@@ -47,10 +47,11 @@ local VI_ON_BRD = Widgets.VI_BRD
 
 -- ── State fingerprint for modified detection ──────────────────
 local function stateFingerprint()
-    return string.format("%d|%d|%s|%d|%d|%.3f|%d|%s|%d|%.3f|%.3f",
+    return string.format("%d|%d|%s|%d|%d|%.3f|%d|%s|%d|%.3f|%.3f|%s|%s",
         S.seed, S.shape_seed, S.gen_mode, S.num_points, S.shape,
         S.tension, S.amp_range, tostring(S.amp_free), S.quant_steps,
-        S.amp_scale or 1.0, S.amp_offset or 0.0)
+        S.amp_scale or 1.0, S.amp_offset or 0.0,
+        tostring(S.flip_x == true), tostring(S.flip_y == true))
 end
 
 -- ── Randomize ─────────────────────────────────────────────────
@@ -647,6 +648,15 @@ function M.drawNewSeedPanel(ctx)
     S.amp_scale  = 1.0
     S.amp_offset = 0.0
   end
+
+  -- Flip X = retrograde (time runs backwards), Flip Y = inversion (turned over inside the range).
+  -- The curve is regenerated from its seed, so these two stay lit while they are on.
+  reaper.ImGui_SetCursorPosX(ctx, cur_x + margin_h)
+  local fx, fy = Widgets.drawFlipPair(ctx, avw - margin_h * 2, S.flip_x, S.flip_y,
+    "Flip X: reverse the curve in time \n(retrograde, heights kept). Stays on until clicked again.",
+    "Flip Y: turn the curve upside down \n(inversion, times kept). Stays on until clicked again.")
+  if fx then S.flip_x = not S.flip_x ; S.preview_dirty = true end
+  if fy then S.flip_y = not S.flip_y ; S.preview_dirty = true end
 end
 
 -- ── SHAPE panel ──────────────────────────────────────────────

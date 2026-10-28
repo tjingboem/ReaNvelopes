@@ -655,18 +655,18 @@ function M.drawRadarPanel(ctx)
     btn_sy = btn_sy + btn_h + btn_gap
   end
 
-  -- Row 2: Flip Amp | Flip H
-  radarBtn("Flip Amp##fa", "#1A2A4A", "#2A4A7A", function() Geo.applyFlipAmp();  _preset_modified = true end, btn2_w, btn_sx,
-    _ui_advanced and "Mirror vertex amplitudes \ntop ↔ bottom" or "Mirror vertex amplitudes \ntop ↔ bottom")
-  radarBtn("Flip H##fh",   "#1A2A4A", "#2A4A7A", function() Geo.flipH();          _preset_modified = true end, btn2_w, btn_sx + btn2_w + btn2_gap,
-    _ui_advanced and "Mirror polygon around \nhorizontal axis" or "Mirror polygon around \nhorizontal axis")
+  -- Row 2: Flip X | Flip Y  (same names as the RAND tab)
+  radarBtn("Flip X##fx", "#1A2A4A", "#2A4A7A", function() Geo.applyFlipTime(); _preset_modified = true end, btn2_w, btn_sx,
+    "Flip X: reverse the wave in time \n(retrograde, heights kept)")
+  radarBtn("Flip Y##fy", "#1A2A4A", "#2A4A7A", function() Geo.applyFlipAmp();  _preset_modified = true end, btn2_w, btn_sx + btn2_w + btn2_gap,
+    "Flip Y: turn the wave upside down \n(inversion, times kept)")
   btn_sy = btn_sy + btn_h + btn_gap
 
-  -- Row 3: Flip Time | Flip V
-  radarBtn("Flip Time##ft", "#1A2A4A", "#2A4A7A", function() Geo.applyFlipTime(); _preset_modified = true end, btn2_w, btn_sx,
-    _ui_advanced and "Reverse vertex order left ↔ right" or "Reverse vertex order left ↔ right")
-  radarBtn("Flip V##fv",    "#1A2A4A", "#2A4A7A", function() Geo.flipV();          _preset_modified = true end, btn2_w, btn_sx + btn2_w + btn2_gap,
-    _ui_advanced and "Mirror polygon around \nvertical axis" or "Mirror polygon around \nvertical axis")
+  -- Row 3: Mirror H | Mirror V  (the polygon itself, as drawn in the radar)
+  radarBtn("Mirror H##mh", "#1A2A4A", "#2A4A7A", function() Geo.flipH(); _preset_modified = true end, btn2_w, btn_sx,
+    "Mirror the polygon around the horizontal axis \n(top <-> bottom: heights turn over and time mirrors)")
+  radarBtn("Mirror V##mv", "#1A2A4A", "#2A4A7A", function() Geo.flipV(); _preset_modified = true end, btn2_w, btn_sx + btn2_w + btn2_gap,
+    "Mirror the polygon around the vertical axis \n(left <-> right: time runs backwards; no change if the shape is already symmetric)")
   btn_sy = btn_sy + btn_h + btn_gap
 
   -- Advance cursor past radar row

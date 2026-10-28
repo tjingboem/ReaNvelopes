@@ -237,6 +237,38 @@ function M.buildPreview(pts)
   return out
 end
 
+-- ── Flip ─────────────────────────────────────────────────────
+-- Retrograde (flip_x) and inversion (flip_y) of a control-point list.
+-- Done on the finished points, so every shape and every seed flips the same way.
+-- flip_x: time runs backwards. A segment's shape is stored on its left point, so
+--         the shapes move one place; fast start (3) and fast end (4) swap and a
+--         bezier tension changes sign, which makes the reversal exact. Only
+--         shape 1 (square, holds the left value) cannot be reversed exactly:
+--         it holds the value of the new left point.
+-- flip_y: v -> lo + hi - v inside the amplitude range, so the curve stays in its
+--         range and quantized levels land on levels. Exact for every shape.
+function M.flip(pts, flip_x, flip_y, lo, hi)
+  if not (flip_x or flip_y) or #pts == 0 then return pts end
+  local n   = #pts
+  local out = {}
+  for k = 1, n do
+    local src = flip_x and pts[n + 1 - k] or pts[k]
+    local p   = { tn = src.tn, v = src.v, shape = src.shape, tension = src.tension }
+    if flip_x then
+      p.tn = 1.0 - src.tn
+      local seg = pts[n - k] or pts[1]       -- the segment that now leaves this point
+      local sh, tn = seg.shape or 0, seg.tension or 0
+      if     sh == 3 then sh = 4
+      elseif sh == 4 then sh = 3
+      elseif sh == 5 then tn = -tn end
+      p.shape, p.tension = sh, tn
+    end
+    if flip_y then p.v = lo + hi - p.v end
+    out[k] = p
+  end
+  return out
+end
+
 -- ── State refresh ─────────────────────────────────────────────
 -- refreshPreview lives in GeneratorWrite.lua so grid mode can read
 -- the real REAPER project grid instead of a fake single-division fallback.

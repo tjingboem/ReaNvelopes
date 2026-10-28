@@ -53,6 +53,24 @@ function M.addPoint(tn, v)
     return true
 end
 
+-- Flip X: retrograde. The points run backwards in time, heights kept.
+-- (Step mode holds the left value, so it is only approximately reversed.)
+function M.flipX()
+    local n, out = #M.points, {}
+    for k = 1, n do
+        local p = M.points[n + 1 - k]
+        out[k] = { tn = 1.0 - p.tn, v = p.v }
+    end
+    M.points = out
+    M.dirty  = true
+end
+
+-- Flip Y: inversion. Heights turn over (v -> 1 - v), times kept.
+function M.flipY()
+    for _, p in ipairs(M.points) do p.v = 1.0 - p.v end
+    M.dirty = true
+end
+
 -- Delete point at index (cannot delete anchors at index 1 and #points)
 function M.deletePoint(idx)
     if idx <= 1 or idx >= #M.points then return false end

@@ -52,6 +52,8 @@ local function serialize()
         ("  amp_range=%d,"):format(S.amp_range or 1),
         ("  amp_free=%s,"):format(tostring(S.amp_free ~= false)),
         ("  quant_steps=%d,"):format(S.quant_steps or 4),
+        ("  flip_x=%s,"):format(tostring(S.flip_x == true)),
+        ("  flip_y=%s,"):format(tostring(S.flip_y == true)),
         ("  amp_scale=%.6f,"):format(S.amp_scale or 1.0),
         ("  amp_offset=%.6f,"):format(S.amp_offset or 0.0),
         "  gen_pts={",
@@ -77,6 +79,8 @@ local function applyData(d)
     S.amp_range   = d.amp_range   or S.amp_range
     S.amp_free    = (d.amp_free ~= false)
     S.quant_steps = d.quant_steps or S.quant_steps
+    S.flip_x      = (d.flip_x == true)
+    S.flip_y      = (d.flip_y == true)
     S.amp_scale   = d.amp_scale   or 1.0
     S.amp_offset  = d.amp_offset  or 0.0
     -- Restore gen_pts if present (allows deterministic geometric shapes)

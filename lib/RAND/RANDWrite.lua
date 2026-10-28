@@ -98,6 +98,7 @@ function M.generateEnvelopePoints()
   else
     pts = Generator.generateFree(params)
   end
+  pts = Generator.flip(pts, S.flip_x, S.flip_y, params.amp_lo, params.amp_hi)
 
   local ts_len = ts_e - ts_s
   -- Take envelopes use times relative to item start (time_offset).
@@ -161,6 +162,7 @@ function M.generateAutomationItem()
   else
     pts = Generator.generateFree(params)
   end
+  pts = Generator.flip(pts, S.flip_x, S.flip_y, params.amp_lo, params.amp_hi)
 
   reaper.PreventUIRefresh(1)
   local ai_idx = EnvWriter.commitAutomationItem(env, pts, ts_s, ts_e)
@@ -234,6 +236,7 @@ function M.refreshPreview(State, params)
   else
     State.gen_pts = Generator.generateGrid(params, divisions)
   end
+  State.gen_pts = Generator.flip(State.gen_pts, State.flip_x, State.flip_y, params.amp_lo, params.amp_hi)
 
   -- Rebuild preview (with bezier boundary re-read below)
   M.rebuildPreviewCurve(State, params)
@@ -278,7 +281,7 @@ function M.rebuildPreviewCurve(State, params)
         local v_before = normFromEnv(rel_s)
         local v_after  = normFromEnv(rel_e)
         local aug = {}
-        if v_before then aug[#aug+1] = { tn=-0.001, v=v_before, shape=5, tension=params.tension } end
+        if v_before then aug[#aug+1] = { tn=-0.001, v=v_before, shape=5, tension=(State.flip_x and -params.tension or params.tension) } end
         for _, p in ipairs(State.gen_pts) do aug[#aug+1] = p end
         if v_after  then aug[#aug+1] = { tn=1.001,  v=v_after,  shape=5, tension=params.tension } end
         preview_pts = aug
