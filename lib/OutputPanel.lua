@@ -27,6 +27,7 @@
 
 local M = {}
 
+local CurveShare = require("CurveShare")
 local Curve    = require("Curve")
 local CurveOut = require("CurveOut")
 local EnvWriter = require("EnvWriter")
@@ -185,6 +186,15 @@ function M.draw(ctx, name, getPoints, writeEnvelope)
   reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 8)   -- round edges
   if reaper.ImGui_Button(ctx, label .. "##outwrite", -1, 36) then
     commit(name, cur, writeEnvelope, hold)
+  end
+  reaper.ImGui_PopStyleVar(ctx)
+  -- SEND CURVE: the curve as it is shown (flips included) for ReaMaskM / ReaShapeM, which lay it over the whole
+  -- X and Y axis of their active envelope with their "Take curve" button.
+  reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 8)
+  if reaper.ImGui_Button(ctx, "SEND CURVE to ReaMaskM / ReaShapeM##outsend", -1, 26) then
+    local ok, n = CurveShare.send(cur, hold, name)
+    if ok then Logger.ok(string.format("✔ curve sent (%d points) — use Take curve in ReaMaskM or ReaShapeM", n))
+    else Logger.error("⚠  " .. tostring(n)) end
   end
   reaper.ImGui_PopStyleVar(ctx)
   if not has_points then reaper.ImGui_EndDisabled(ctx) end
