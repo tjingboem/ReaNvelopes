@@ -43,7 +43,7 @@ local S = {
 }
 M.state = S
 
-local TARGETS = "Parameter envelope (automation item)\0MIDI CC / pitch bend / pressure\0Note value (selected MIDI item)\0"
+local TARGETS = "Parameter envelope (automation item)\0MIDI CC / pitch bend / pressure\0Note value (selected MIDI item)\0Send to ReaMaskM / ReaShapeM\0"
 local VALUES  = "Velocity\0Velocity off (lift)\0Duration\0Pitch\0Channel\0Mute\0"
 local VALUE_KEYS = { "velocity", "lift", "duration", "pitch", "channel", "mute" }
 local KINDS   = "CC\0Pitch bend\0Channel pressure\0"
@@ -70,7 +70,13 @@ local function buildCurve(points, hold)
   return Curve.new(pts, lengthBeats, hold and true or false), startBeats, ts_s, ts_e
 end
 
-local function doCommit(name, points, writeEnvelope, hold)
+local function doCommit(name, points, writeEnvelope, hold, getControl)
+  if S.target == 4 then   -- Send to ReaMaskM / ReaShapeM: the curve as shown (flips included), no time selection needed
+    local ok, n = CurveShare.send(points, hold, name, getControl and getControl())
+    if ok then Logger.ok(string.format("✔ curve sent (%d points) — use Take Curve from ReaNvelopes in ReaMaskM or ReaShapeM", n))
+    else Logger.error("⚠  " .. tostring(n)) end
+    return
+  end
   if S.target == 1 and writeEnvelope then
     writeEnvelope()
     return
@@ -110,9 +116,9 @@ end
 
 -- Every write runs inside a capture: whatever went wrong (no envelope selected, no time selection, no curve ...) is
 -- shown in a window the user has to close with OK, because the status bar line is too easy to miss.
-local function commit(name, points, writeEnvelope, hold)
+local function commit(name, points, writeEnvelope, hold, getControl)
   Logger.capture = {}
-  doCommit(name, points, writeEnvelope, hold)
+  doCommit(name, points, writeEnvelope, hold, getControl)
   local errs = Logger.capture
   Logger.capture = nil
   if #errs > 0 then
@@ -182,19 +188,10 @@ function M.draw(ctx, name, getPoints, writeEnvelope, getControl)
   local cur, hold = getPoints()
   local has_points = cur and #cur > 0
   if not has_points then reaper.ImGui_BeginDisabled(ctx) end
-  local label = (S.target == 1) and "WRITE TO ENVELOPE" or (S.target == 2) and "WRITE MIDI" or "SET NOTE VALUES"
+  local label = (S.target == 1) and "WRITE TO ENVELOPE" or (S.target == 2) and "WRITE MIDI" or (S.target == 4) and "SEND CURVE" or "SET NOTE VALUES"
   reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 8)   -- round edges
   if reaper.ImGui_Button(ctx, label .. "##outwrite", -1, 36) then
-    commit(name, cur, writeEnvelope, hold)
-  end
-  reaper.ImGui_PopStyleVar(ctx)
-  -- SEND CURVE: the curve as it is shown (flips included) for ReaMaskM / ReaShapeM, which lay it over the whole
-  -- X and Y axis of their active envelope with their "Take curve" button.
-  reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 8)
-  if reaper.ImGui_Button(ctx, "SEND CURVE to ReaMaskM / ReaShapeM##outsend", -1, 26) then
-    local ok, n = CurveShare.send(cur, hold, name, getControl and getControl())
-    if ok then Logger.ok(string.format("✔ curve sent (%d points) — use Take curve in ReaMaskM or ReaShapeM", n))
-    else Logger.error("⚠  " .. tostring(n)) end
+    commit(name, cur, writeEnvelope, hold, getControl)
   end
   reaper.ImGui_PopStyleVar(ctx)
   if not has_points then reaper.ImGui_EndDisabled(ctx) end
