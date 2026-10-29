@@ -239,20 +239,20 @@ end
 
 -- Control points for SEND CURVE: the points as they are, with the shape of the segment that
 -- leaves each point (0 linear, 1 step, 2 slow start+end, 3 fast start, 4 fast end).
--- Shape 5 (bezier with tension) has no simple twin in the receivers, so those segments are
--- cut into `n` straight pieces instead; everything else stays as it is.
+-- Shape 5 (bezier with tension) has no simple twin in the receivers: that segment travels as
+-- `n` samples (p.samples), which CurveShare fits with a few cubic segments.
 function M.controlForSend(pts, n)
-  n = n or 16
+  n = n or 48
   local out = {}
   for i, p in ipairs(pts) do
     local sh = p.shape or 0
     if sh == 5 and pts[i + 1] then
-      out[#out + 1] = { tn = p.tn, v = p.v, shape = 0 }
-      local nxt = pts[i + 1]
-      for k = 1, n - 1 do
+      local nxt, samples = pts[i + 1], {}
+      for k = 0, n do
         local tn = p.tn + (nxt.tn - p.tn) * k / n
-        out[#out + 1] = { tn = tn, v = evalPtsAt(pts, tn), shape = 0 }
+        samples[#samples + 1] = { t = tn, v = (k == 0) and p.v or (k == n) and nxt.v or evalPtsAt(pts, tn) }
       end
+      out[#out + 1] = { tn = p.tn, v = p.v, shape = 5, samples = samples }
     else
       out[#out + 1] = { tn = p.tn, v = p.v, shape = (sh == 5) and 0 or sh }
     end
