@@ -17,13 +17,13 @@
 --   levels c1 and c2, all 0..1). A receiver lays the curve over the whole X axis and the
 --   whole Y axis of its active envelope: v = 0 is the bottom, v = 1 the top, taken
 --   as sent. What the values mean is the user's choice, made here.
---   It travels through REAPER's ExtState (section "ReaCurve", key "current",
---   persistent, so it survives a restart).
+--   It travels through REAPER's ExtState (section "tjingboem_curve", key "current",
+--   persistent; stored on one line, the lines joined with ";", so that it survives a restart).
 -- ============================================================
 
 local M = {}
 
-M.SECTION, M.KEY = "ReaCurve", "current"
+M.SECTION, M.KEY = "tjingboem_curve", "current"
 
 
 -- Cubic fit. One segment of the samples p[a..b] becomes a cubic bezier with its handles a third and
@@ -113,7 +113,7 @@ function M.encodeControl(ctrl, name)
   end
   p[1].t, p[#p].t = 0.0, 1.0
   p[#p].shape = 0
-  local lines = { "ReaCurve 1", "name=" .. (tostring(name or ""):gsub("[\r\n]", " ")) }
+  local lines = { "ReaCurve 1", "name=" .. (tostring(name or ""):gsub("[\r\n;]", " ")) }
   for _, q in ipairs(p) do
     if q.shape == 5 and q.c1 and q.c2 then
       lines[#lines + 1] = string.format("%.6f,%.6f,5,%.6f,%.6f", q.t, q.v, q.c1, q.c2)
@@ -151,7 +151,7 @@ function M.encode(points, hold, name)
     for i, q in ipairs(f) do ctrl[i] = { tn = q.t, v = q.v, shape = q.shape, c1 = q.c1, c2 = q.c2 } end
     return M.encodeControl(ctrl, name)
   end
-  local lines = { "ReaCurve 1", "name=" .. (tostring(name or ""):gsub("[\r\n]", " ")) }
+  local lines = { "ReaCurve 1", "name=" .. (tostring(name or ""):gsub("[\r\n;]", " ")) }
   for _, q in ipairs(out) do lines[#lines + 1] = string.format("%.6f,%.6f", q.t, q.v) end
   return table.concat(lines, "\n") .. "\n", #out
 end
@@ -162,7 +162,9 @@ function M.send(points, hold, name, control)
   if control and #control >= 2 then text, n = M.encodeControl(control, name)
   else text, n = M.encode(points, hold, name) end
   if not text then return false, n end
-  reaper.SetExtState(M.SECTION, M.KEY, text, true)
+  -- One line: REAPER writes a persistent value to its .ini file only up to the first line break, so the
+  -- lines are joined with ";" (the receivers read ";" and line breaks alike).
+  reaper.SetExtState(M.SECTION, M.KEY, (text:gsub("\r?\n", ";")), true)
   return true, n
 end
 
