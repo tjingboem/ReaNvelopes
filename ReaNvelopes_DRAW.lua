@@ -91,7 +91,13 @@ function DRAW_Tool.drawUI(ctx)
             for i, p in ipairs(S.toSendPts()) do out[i] = { tn = p.x, v = p.y } end
             return out, (S.shape_mode == "step")   -- steps: a value is held until the next point
         end,
-        nil)
+        nil,
+        function()   -- SEND CURVE: the drawn points with the segment shape of the mode (linear 0, step 1, smooth 2)
+            local sh = (S.shape_mode == "step") and 1 or (S.shape_mode == "smooth") and 2 or 0
+            local out = {}
+            for i, p in ipairs(S.points) do out[i] = { tn = p.tn, v = p.v, shape = sh } end
+            return out
+        end)
 
     reaper.ImGui_Dummy(ctx, 1, 2)
 end

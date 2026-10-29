@@ -105,6 +105,9 @@ function RAND_Tool.drawUI(ctx)
             reaper.Undo_BeginBlock()
             RANDWrite.generateAutomationItem()
             reaper.Undo_EndBlock("ReaNvelopes: RAND to envelope", -1)
+        end,
+        function()   -- SEND CURVE: the control points with their shapes, not the 256 samples
+            return require("Generator").controlForSend(RANDState.gen_pts or {}, 16)
         end)
 
     reaper.ImGui_Dummy(ctx, 1, 2)

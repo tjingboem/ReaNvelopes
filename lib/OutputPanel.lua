@@ -128,7 +128,7 @@ end
 M._commit = function(...) return commit(...) end   -- for the offline tests
 M._buildCurve = function(...) return buildCurve(...) end
 
-function M.draw(ctx, name, getPoints, writeEnvelope)
+function M.draw(ctx, name, getPoints, writeEnvelope, getControl)
   local _
   _, S.target = reaper.ImGui_Combo(ctx, "Target##outtarget", S.target - 1, TARGETS)
   S.target = S.target + 1
@@ -192,7 +192,7 @@ function M.draw(ctx, name, getPoints, writeEnvelope)
   -- X and Y axis of their active envelope with their "Take curve" button.
   reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 8)
   if reaper.ImGui_Button(ctx, "SEND CURVE to ReaMaskM / ReaShapeM##outsend", -1, 26) then
-    local ok, n = CurveShare.send(cur, hold, name)
+    local ok, n = CurveShare.send(cur, hold, name, getControl and getControl())
     if ok then Logger.ok(string.format("✔ curve sent (%d points) — use Take curve in ReaMaskM or ReaShapeM", n))
     else Logger.error("⚠  " .. tostring(n)) end
   end

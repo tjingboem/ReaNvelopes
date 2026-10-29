@@ -237,6 +237,29 @@ function M.buildPreview(pts)
   return out
 end
 
+-- Control points for SEND CURVE: the points as they are, with the shape of the segment that
+-- leaves each point (0 linear, 1 step, 2 slow start+end, 3 fast start, 4 fast end).
+-- Shape 5 (bezier with tension) has no simple twin in the receivers, so those segments are
+-- cut into `n` straight pieces instead; everything else stays as it is.
+function M.controlForSend(pts, n)
+  n = n or 16
+  local out = {}
+  for i, p in ipairs(pts) do
+    local sh = p.shape or 0
+    if sh == 5 and pts[i + 1] then
+      out[#out + 1] = { tn = p.tn, v = p.v, shape = 0 }
+      local nxt = pts[i + 1]
+      for k = 1, n - 1 do
+        local tn = p.tn + (nxt.tn - p.tn) * k / n
+        out[#out + 1] = { tn = tn, v = evalPtsAt(pts, tn), shape = 0 }
+      end
+    else
+      out[#out + 1] = { tn = p.tn, v = p.v, shape = (sh == 5) and 0 or sh }
+    end
+  end
+  return out
+end
+
 -- ── Flip ─────────────────────────────────────────────────────
 -- Retrograde (flip_x) and inversion (flip_y) of a control-point list.
 -- Done on the finished points, so every shape and every seed flips the same way.
