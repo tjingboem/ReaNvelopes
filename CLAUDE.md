@@ -2,7 +2,7 @@
 
 Started 21 October 2026 by tjingboem as the home of ReaComposeM's curve-GENERATING part. He intends to delete the
 ReaComposeM repo later. All editing of a curve happens in REAPER's own envelope editor (and ReaShapeM where it helps),
-so there is no editor here. See `~/Downloads/ReaTjingboem/CLAUDE.md` ("How the family fits together") for why.
+so there is no editor here. See `~/Claude/ReaTjingboem/CLAUDE.md` ("How the family fits together") for why.
 
 ## What is here
 

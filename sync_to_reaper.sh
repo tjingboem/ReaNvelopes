@@ -8,4 +8,4 @@ rsync -av --delete \
   --exclude='.git' \
   --exclude='doc' \
   --exclude='sync_to_reaper.sh' \
-  ~/Downloads/ReaNvelopes/ /home/tjingboem/.config/REAPER/Scripts/tjingboem/ReaNvelopes/
+  ~/Claude/ReaNvelopes/ /home/tjingboem/.config/REAPER/Scripts/tjingboem/ReaNvelopes/
