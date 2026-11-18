@@ -65,7 +65,21 @@ Not built, on purpose: position (timing is ReaShapeM's), program change, polypho
 Integration Contract, as in ReaComposeM's version; the hub shows `ReaSnap.windowTitle` and closes when
 `ReaSnap.shouldClose()` says so (outside the visible gate, so a collapsed window also closes). It only works for an
 instance launched through ReaSnap (the launcher puts the project identity in ExtState); one started from the Actions
-list is not eligible. Pieces 1, 3 and 4 (item settings) are not built.
+list is not eligible.
+
+## Full member of ReaSnap (19 November 2026)
+
+tjingboem: "i want ReaNvelopes to be a full member of the ReaSnap system." Pieces 1, 3 and 4 are built:
+- Piece 1: `lib/ReaNvelopes_Serial.lua` (a copy of ReaAC's `core/reaac_serial.lua`; no `load()` of strings from outside).
+- Piece 3: after a successful WRITE MIDI (CC / pitch bend / pressure) or SET NOTE VALUES, `OutputPanel` writes
+  `{ tool = "RAND"|"OSC"|"DRAW", gen = <that generator's preset data>, out = <the OUTPUT section's settings> }` ONTO the MIDI
+  item (item P_EXT `ReaNvelopes_ItemSettings`, base64, so a copy of the item carries it; `ReaSnap.writeItemState`). The
+  generators give their settings through `getToolState` (6th argument of `OutputPanel.draw`) = `<X>Presets.getData()`, which
+  is the preset content. The envelope targets (automation item) and Send curve write into no media item, so nothing is
+  remembered for them.
+- Piece 4: ReaSnap's launch with settings leaves `pending_ReaNvelopes_settings`; `ReaSnap.pending_state` holds it, the hub
+  applies it before the first frame (`<X>Presets.applyData`, `OutputPanel.applyState`) and shows that generator's tab first.
+Tested offline (write -> ReaSnap's reader -> apply, for RAND, OSC and DRAW, and the pending hand-over). NOT yet tried in REAPER.
 
 ## DRAW smooth (fixed 21 October 2026)
 

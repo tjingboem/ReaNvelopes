@@ -108,7 +108,8 @@ function RAND_Tool.drawUI(ctx)
         end,
         function()   -- SEND CURVE: the control points with their shapes, not the 256 samples
             return require("Generator").controlForSend(RANDState.gen_pts or {}, 48)
-        end)
+        end,
+        function() return require("RANDPresets").getData() end)
 
     reaper.ImGui_Dummy(ctx, 1, 2)
 end

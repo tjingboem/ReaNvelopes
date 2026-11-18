@@ -22,6 +22,7 @@
 --   A tool calls  OutputPanel.draw(ctx, name, getPoints, writeEnvelope)
 --     getPoints()      -> list of { tn = 0..1, v = 0..1 }  (the curve), and optionally true as a second value
 --                         when the curve is steps (a value is held until the next point)
+--     getToolState()   -> the generator's own settings as a plain table (its preset data), for ReaSnap; nil = none
 --     writeEnvelope()  -> the tool's own "write to the envelope" call; nil = use the generic one (CurveOut)
 -- ============================================================
 
@@ -32,6 +33,7 @@ local Curve    = require("Curve")
 local CurveOut = require("CurveOut")
 local EnvWriter = require("EnvWriter")
 local Logger   = require("Logger")
+local ReaSnap  = require("ReaSnap_Integration")   -- the settings go onto the item (ReaSnap Integration Contract piece 3)
 
 local S = {
   target = 1, kind = 1, cc = 1, channel = 0,
@@ -70,7 +72,25 @@ local function buildCurve(points, hold)
   return Curve.new(pts, lengthBeats, hold and true or false), startBeats, ts_s, ts_e
 end
 
-local function doCommit(name, points, writeEnvelope, hold, getControl)
+-- ReaSnap Integration Contract piece 3: the generator's settings and this OUTPUT section's settings go onto the MIDI
+-- item that was written to, so ReaSnap's S button can bring the window back for it, also for a copy of the item.
+-- Only the MIDI targets write into an item; the envelope targets have no media item to carry anything.
+local function rememberOnItem(item, name, getToolState)
+  if not item or not getToolState then return end
+  local out = {}
+  for k, v in pairs(S) do out[k] = v end
+  ReaSnap.writeItemState(item, { tool = (name:match(":%s*(%w+)$") or name), gen = getToolState(), out = out })
+end
+
+-- The way back (piece 4): this section's settings from a remembered state.
+function M.applyState(out)
+  if type(out) ~= "table" then return end
+  for k, v in pairs(out) do
+    if S[k] ~= nil and type(S[k]) == type(v) then S[k] = v end
+  end
+end
+
+local function doCommit(name, points, writeEnvelope, hold, getControl, getToolState)
   if S.target == 4 then   -- Send to ReaMaskM / ReaShapeM: the curve as shown (flips included), no time selection needed
     local ok, n = CurveShare.send(points, hold, name, getControl and getControl())
     if ok then Logger.ok(string.format("✔ curve sent (%d points) — use Take Curve from ReaNvelopes in ReaMaskM or ReaShapeM", n))
@@ -105,20 +125,22 @@ local function doCommit(name, points, writeEnvelope, hold, getControl)
     opts.pitchHi   = (S.pitchMode == 2) and S.pitchAbsHi or S.pitchShiftHi
     opts.chLo, opts.chHi = S.chLo - 1, S.chHi - 1
     opts.threshold, opts.invert = S.threshold / 100.0, S.invert
-    local ok, err, _, count = CurveOut.commitNoteValue(curve, opts)
+    local ok, err, item, count = CurveOut.commitNoteValue(curve, opts)
+    if ok then rememberOnItem(item, name, getToolState) end
     if ok then Logger.ok(string.format("✔ %s set on %d notes", (VALUES:match("^" .. string.rep("[^%z]*%z", S.value - 1) .. "([^%z]*)%z") or "Value"), count))
     else Logger.error("⚠  " .. tostring(err)) end
   else
-    local ok, err, _, count = CurveOut.commitCC(curve, opts)
+    local ok, err, item, count = CurveOut.commitCC(curve, opts)
+    if ok then rememberOnItem(item, name, getToolState) end
     if ok then Logger.ok(string.format("✔ %d MIDI events written", count)) else Logger.error("⚠  " .. tostring(err)) end
   end
 end
 
 -- Every write runs inside a capture: whatever went wrong (no envelope selected, no time selection, no curve ...) is
 -- shown in a window the user has to close with OK, because the status bar line is too easy to miss.
-local function commit(name, points, writeEnvelope, hold, getControl)
+local function commit(name, points, writeEnvelope, hold, getControl, getToolState)
   Logger.capture = {}
-  doCommit(name, points, writeEnvelope, hold, getControl)
+  doCommit(name, points, writeEnvelope, hold, getControl, getToolState)
   local errs = Logger.capture
   Logger.capture = nil
   if #errs > 0 then
@@ -134,7 +156,7 @@ end
 M._commit = function(...) return commit(...) end   -- for the offline tests
 M._buildCurve = function(...) return buildCurve(...) end
 
-function M.draw(ctx, name, getPoints, writeEnvelope, getControl)
+function M.draw(ctx, name, getPoints, writeEnvelope, getControl, getToolState)
   local _
   _, S.target = reaper.ImGui_Combo(ctx, "Target##outtarget", S.target - 1, TARGETS)
   S.target = S.target + 1
@@ -191,7 +213,7 @@ function M.draw(ctx, name, getPoints, writeEnvelope, getControl)
   local label = (S.target == 1) and "WRITE TO ENVELOPE" or (S.target == 2) and "WRITE MIDI" or (S.target == 4) and "SEND CURVE" or "SET NOTE VALUES"
   reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 8)   -- round edges
   if reaper.ImGui_Button(ctx, label .. "##outwrite", -1, 36) then
-    commit(name, cur, writeEnvelope, hold, getControl)
+    commit(name, cur, writeEnvelope, hold, getControl, getToolState)
   end
   reaper.ImGui_PopStyleVar(ctx)
   if not has_points then reaper.ImGui_EndDisabled(ctx) end

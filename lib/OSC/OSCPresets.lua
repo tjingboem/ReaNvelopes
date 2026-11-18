@@ -102,6 +102,13 @@ local function applyData(d)
   return true
 end
 
+-- ReaSnap: the whole state of this generator as a plain table (the preset content), and the way back.
+function M.getData()
+    local fn = load(serialize())   -- serialize() is this file's own preset writer: its text is never from outside
+    return fn and fn() or {}
+end
+M.applyData = applyData
+
 -- Returns true if a preset file with this name exists
 function M.exists(name)
   if not _preset_dir or name == "" then return false end

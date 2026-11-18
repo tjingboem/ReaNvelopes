@@ -97,7 +97,8 @@ function DRAW_Tool.drawUI(ctx)
             local out = {}
             for i, p in ipairs(S.points) do out[i] = { tn = p.tn, v = p.v, shape = sh } end
             return out
-        end)
+        end,
+        function() return require("DRAWPresets").getData() end)
 
     reaper.ImGui_Dummy(ctx, 1, 2)
 end

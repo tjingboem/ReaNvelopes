@@ -112,7 +112,9 @@ function OSC_Tool.drawUI(ctx)
             for i, p in ipairs(pts or {}) do out[i] = { tn = p.x, v = p.y } end
             return out
         end,
-        mods.OSCWrite.generateAutomationItem)
+        mods.OSCWrite.generateAutomationItem,
+        nil,
+        function() return require("OSCPresets").getData() end)
 
     reaper.ImGui_Dummy(ctx, 1, 2)
 end

@@ -45,6 +45,29 @@ local RAND_Tool = require("ReaNvelopes_RAND")
 local OSC_Tool  = nil
 local DRAW_Tool = nil
 
+-- ReaSnap Integration Contract piece 4: a launch by ReaSnap with settings (S button, Restore): the generator's settings
+-- and the OUTPUT settings are applied before the first frame, and the tab of that generator is the one shown first.
+local select_tab = nil
+do
+  local st = ReaSnap.pending_state
+  local preset_module = st and ({ RAND = "RANDPresets", OSC = "OSCPresets", DRAW = "DRAWPresets" })[st.tool]
+  if preset_module then
+    local ok, P = pcall(require, preset_module)
+    if ok and P and P.applyData and type(st.gen) == "table" then P.applyData(st.gen) end
+    local ok_o, OutputPanel = pcall(require, "OutputPanel")
+    if ok_o and OutputPanel.applyState then OutputPanel.applyState(st.out) end
+    select_tab = st.tool
+  end
+end
+
+local function tab_flags(tool)   -- the selected tab for the first frame only
+  if select_tab == tool then
+    select_tab = nil
+    return reaper.ImGui_TabItemFlags_SetSelected()
+  end
+  return 0
+end
+
 local EXT_KEY = "ReaNvelopes_MAIN"
 local popupText = nil   -- the message in the open popup window
 local ctx = reaper.ImGui_CreateContext(script_name)
@@ -61,11 +84,11 @@ local function loop()
 
   if visible then
     if reaper.ImGui_BeginTabBar(ctx, "ReaNvelopesTabs") then
-      if reaper.ImGui_BeginTabItem(ctx, "RAND") then
+      if reaper.ImGui_BeginTabItem(ctx, "RAND", nil, tab_flags("RAND")) then
         RAND_Tool.drawUI(ctx)
         reaper.ImGui_EndTabItem(ctx)
       end
-      if reaper.ImGui_BeginTabItem(ctx, "OSC") then
+      if reaper.ImGui_BeginTabItem(ctx, "OSC", nil, tab_flags("OSC")) then
         if not OSC_Tool then
           local ok, res = pcall(require, "ReaNvelopes_OSC")
           if ok then OSC_Tool = res
@@ -77,7 +100,7 @@ local function loop()
         if OSC_Tool and OSC_Tool.drawUI then OSC_Tool.drawUI(ctx) end
         reaper.ImGui_EndTabItem(ctx)
       end
-      if reaper.ImGui_BeginTabItem(ctx, "DRAW") then
+      if reaper.ImGui_BeginTabItem(ctx, "DRAW", nil, tab_flags("DRAW")) then
         if not DRAW_Tool then
           local ok, res = pcall(require, "ReaNvelopes_DRAW")
           if ok then DRAW_Tool = res

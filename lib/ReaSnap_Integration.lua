@@ -2,8 +2,9 @@
 --   ReaSnap_Integration.lua
 --   Pieces 2 and 5 of the ReaSnap Integration Contract, for ReaNvelopes:
 --   the window title with an instance number (cosmetic) and Close All.
---   ReaNvelopes has no per-item settings, so pieces 1, 3 and 4 (the
---   serializer, the item-GUID write, the settings apply) are not here.
+--   Since 19 November 2026 it speaks the item-settings pieces too: 1 (own serializer, lib/ReaNvelopes_Serial.lua),
+--   3 (the settings are written ONTO the item that got the MIDI CC / note values, M.writeItemState; an item copy
+--   carries them) and 4 (a launch by ReaSnap with settings: M.pending_state, applied by the hub at startup).
 --   Written after ReaComposeM's version of the same module.
 --
 --   Used by ReaNvelopes.lua:
@@ -14,7 +15,25 @@
 
 local TOOL_NAME = "ReaNvelopes"
 
+local Serial = require("ReaNvelopes_Serial")
+
 local M = {}
+
+-- Piece 4: settings put there by ReaSnap's launcher (read once, then cleared). nil when launched any other way.
+M.pending_state = nil
+if reaper.HasExtState("ReaSculpt_Registry", "pending_" .. TOOL_NAME .. "_settings") then
+  local raw = reaper.GetExtState("ReaSculpt_Registry", "pending_" .. TOOL_NAME .. "_settings")
+  reaper.DeleteExtState("ReaSculpt_Registry", "pending_" .. TOOL_NAME .. "_settings", false)
+  local ok, state = pcall(Serial.decode, raw)
+  if ok and type(state) == "table" then M.pending_state = state end
+end
+
+-- Piece 3: the settings that made this item, onto the item itself (copies carry them). Never raises.
+function M.writeItemState(item, state)
+  if not item then return false end
+  local ok, err = pcall(function() Serial.write_item_state(item, TOOL_NAME, Serial.encode(state)) end)
+  return ok
+end
 
 -- Piece 2: instance number, put there by ReaSnap's launcher (read once, then cleared).
 M.instance_number = nil
