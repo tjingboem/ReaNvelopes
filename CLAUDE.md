@@ -75,8 +75,19 @@ tjingboem: "i want ReaNvelopes to be a full member of the ReaSnap system." Piece
   `{ tool = "RAND"|"OSC"|"DRAW", gen = <that generator's preset data>, out = <the OUTPUT section's settings> }` ONTO the MIDI
   item (item P_EXT `ReaNvelopes_ItemSettings`, base64, so a copy of the item carries it; `ReaSnap.writeItemState`). The
   generators give their settings through `getToolState` (6th argument of `OutputPanel.draw`) = `<X>Presets.getData()`, which
-  is the preset content. The envelope targets (automation item) and Send curve write into no media item, so nothing is
-  remembered for them.
+  is the preset content.
+- The envelope targets write an automation item: the same state goes into the automation item's pool
+  (`GetSetAutomationItemInfo_String`, `P_POOL_EXT:ReaNvelopes_ItemSettings`, base64; `ReaSnap.writeAutomationItemState`,
+  called after `EnvWriter.finalizeAutomationItem` set `EnvWriter.lastAI`, or with the env and index that
+  `CurveOut.commitEnvelope` now returns). ReaSnap's S button falls back to the selected automation item of the selected
+  envelope (`ReaSnap_Core.selected_automation_item_state`), and Capture walks the automation items of every track
+  (snapshot key `script_ReaNvelopes_AI<track guid>_<envelope>_<index>`). Written 19 November 2026, tested only against
+  a mock, then tried in REAPER by tjingboem the same day: S on the written item works, S on the restored item works, S on a
+  pooled copy and on an unpooled (unique) copy both work. The snapshot restore left the automation item EMPTY (its points
+  did not come back), which ReaSnap now repairs itself: Capture records each automation item (position, length, points,
+  tool settings) under `autoitem_<track guid>_<envelope>_<index>`, Restore fills an empty item from that record or
+  inserts a missing one (`ReaSnap_Core.lua`, `capture_automation_items` / `restore_automation_items`).
+- Send curve writes no item and no automation item, so nothing is remembered for it.
 - Piece 4: ReaSnap's launch with settings leaves `pending_ReaNvelopes_settings`; `ReaSnap.pending_state` holds it, the hub
   applies it before the first frame (`<X>Presets.applyData`, `OutputPanel.applyState`) and shows that generator's tab first.
 Tested offline (write -> ReaSnap's reader -> apply, for RAND, OSC and DRAW, and the pending hand-over). NOT yet tried in REAPER.

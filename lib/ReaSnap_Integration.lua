@@ -28,6 +28,16 @@ if reaper.HasExtState("ReaSculpt_Registry", "pending_" .. TOOL_NAME .. "_setting
   if ok and type(state) == "table" then M.pending_state = state end
 end
 
+-- Piece 3 for an automation item (the envelope targets): REAPER keeps a text value with an automation item's pool
+-- (P_POOL_EXT), saved with the project, so the settings go there. Never raises.
+function M.writeAutomationItemState(env, idx, state)
+  if not env or not idx or idx < 0 then return false end
+  local ok = pcall(function()
+    reaper.GetSetAutomationItemInfo_String(env, idx, "P_POOL_EXT:" .. TOOL_NAME .. "_ItemSettings", "b64:" .. Serial.b64_encode(Serial.encode(state)), true)
+  end)
+  return ok
+end
+
 -- Piece 3: the settings that made this item, onto the item itself (copies carry them). Never raises.
 function M.writeItemState(item, state)
   if not item then return false end

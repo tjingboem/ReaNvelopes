@@ -410,7 +410,7 @@ function M.commitEnvelope(curve, opts)
   reaper.PreventUIRefresh(-1)
   reaper.UpdateArrange()
   reaper.Undo_EndBlock((opts.name or "ReaNvelopes") .. ": curve to envelope", -1)
-  return true, nil, envName, #pts, (useAI and aiIdx ~= nil and aiIdx >= 0)
+  return true, nil, envName, #pts, (useAI and aiIdx ~= nil and aiIdx >= 0), env, aiIdx
 end
 
 return M

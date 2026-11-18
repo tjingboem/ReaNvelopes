@@ -148,6 +148,8 @@ function M.finalizeAutomationItem(env, ts_s, ts_e)
   local ai_idx = reaper.InsertAutomationItem(env, -1, ts_s, ts_e - ts_s)
   reaper.DeleteEnvelopePointRangeEx(env, -1, ts_s - 0.0001, ts_e + 0.0001)
   reaper.Envelope_SortPointsEx(env, -1)
+  -- ReaSnap: which automation item was just made, so the tool that asked for it can put its settings on it.
+  M.lastAI = (ai_idx and ai_idx >= 0) and { env = env, idx = ai_idx } or nil
   return ai_idx
 end
 

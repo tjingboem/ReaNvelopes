@@ -315,7 +315,7 @@ end
 -- settings of its original. Stored as base64 ("b64:" + text) so line breaks and quotes in the encoded settings cannot
 -- upset REAPER's item chunk. Same format and key as in ReaSnap, which reads it (ReaSnap_Core.lua, ReaSnapItemState).
 local B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-function M.write_item_state(item, tool, encoded)
+function M.b64_encode(encoded)
   local out = {}
   for i = 1, #encoded, 3 do
     local a, b, c = encoded:byte(i, i + 2)
@@ -324,7 +324,11 @@ function M.write_item_state(item, tool, encoded)
     out[#out + 1] = B64:sub(c1 + 1, c1 + 1) .. B64:sub(c2 + 1, c2 + 1)
       .. (b and B64:sub(c3 + 1, c3 + 1) or "=") .. (c and B64:sub(c4 + 1, c4 + 1) or "=")
   end
-  return reaper.GetSetMediaItemInfo_String(item, "P_EXT:" .. tool .. "_ItemSettings", "b64:" .. table.concat(out), true)
+  return table.concat(out)
+end
+
+function M.write_item_state(item, tool, encoded)
+  return reaper.GetSetMediaItemInfo_String(item, "P_EXT:" .. tool .. "_ItemSettings", "b64:" .. M.b64_encode(encoded), true)
 end
 
 

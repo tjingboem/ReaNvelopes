@@ -75,11 +75,21 @@ end
 -- ReaSnap Integration Contract piece 3: the generator's settings and this OUTPUT section's settings go onto the MIDI
 -- item that was written to, so ReaSnap's S button can bring the window back for it, also for a copy of the item.
 -- Only the MIDI targets write into an item; the envelope targets have no media item to carry anything.
-local function rememberOnItem(item, name, getToolState)
-  if not item or not getToolState then return end
+local function buildState(name, getToolState)
   local out = {}
   for k, v in pairs(S) do out[k] = v end
-  ReaSnap.writeItemState(item, { tool = (name:match(":%s*(%w+)$") or name), gen = getToolState(), out = out })
+  return { tool = (name:match(":%s*(%w+)$") or name), gen = getToolState(), out = out }
+end
+
+local function rememberOnItem(item, name, getToolState)
+  if not item or not getToolState then return end
+  ReaSnap.writeItemState(item, buildState(name, getToolState))
+end
+
+-- The envelope targets write an automation item; the settings go onto that one (see ReaSnap_Integration).
+local function rememberOnAutomationItem(env, idx, name, getToolState)
+  if not env or not idx or idx < 0 or not getToolState then return end
+  ReaSnap.writeAutomationItemState(env, idx, buildState(name, getToolState))
 end
 
 -- The way back (piece 4): this section's settings from a remembered state.
@@ -98,7 +108,9 @@ local function doCommit(name, points, writeEnvelope, hold, getControl, getToolSt
     return
   end
   if S.target == 1 and writeEnvelope then
+    EnvWriter.lastAI = nil
     writeEnvelope()
+    if EnvWriter.lastAI then rememberOnAutomationItem(EnvWriter.lastAI.env, EnvWriter.lastAI.idx, name, getToolState) end
     return
   end
   local curve, startBeats, rangeS, rangeE = buildCurve(points, hold)
@@ -109,8 +121,9 @@ local function doCommit(name, points, writeEnvelope, hold, getControl, getToolSt
     rangeStart = rangeS, rangeEnd = rangeE,
   }
   if S.target == 1 then   -- a tool without an envelope writer of its own: the generic one, into the selected lane
-    local ok, err, envName, count, madeAI = CurveOut.commitEnvelope(curve, { name = name, thin = S.thinPct / 100.0,
+    local ok, err, envName, count, madeAI, aiEnv, aiIdx = CurveOut.commitEnvelope(curve, { name = name, thin = S.thinPct / 100.0,
       clear = true, automationItem = true, rangeStart = rangeS, rangeEnd = rangeE })
+    if ok and madeAI then rememberOnAutomationItem(aiEnv, aiIdx, name, getToolState) end
     if ok then Logger.ok(string.format("✔ %d points to \"%s\"%s", count, tostring(envName), madeAI and " (automation item)" or ""))
     else Logger.error("⚠  " .. tostring(err)) end
     return
