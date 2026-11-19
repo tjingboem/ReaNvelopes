@@ -43,11 +43,20 @@ end
 
 -- 1. the first hub (started as ReaSnap starts a window: with a project identity, so it follows the selection)
 reaper.SetExtState("ReaSculpt_Registry", "pending_ReaNvelopes_project_identity", "/test/project.rpp", false)
+reaper.SetExtState("tjingboem_WindowPlace", "place_ReaNvelopes", "120,80,800,700", true)    -- dragged there (and resized) in an earlier run
 local ok, err = pcall(dofile, NV .. "/ReaNvelopes.lua")
 report(ok, "the hub starts", err)
 local Registry = package.loaded["WindowRegistry"]
 report(Registry ~= nil and #queue == 1, "the hub registered its frame loop")
 report(frames(30), "30 frames are drawn without a script error")
+do
+  local ids = reaper.GetExtState("tjingboem_WindowPlace", "wins")
+  local stamp = reaper.GetExtState("tjingboem_WindowPlace", "win_" .. (ids:match("[^;]+") or ""))
+  local tool, x, y, w, h = stamp:match("^([^|]*)|(-?%d+)|(-?%d+)|(%d+)|(%d+)|")
+  report(tool == "ReaNvelopes" and tonumber(x) == 120 and tonumber(y) == 80, "the window was given the saved POSITION", stamp)
+  report(tonumber(w) == 800 and tonumber(h) == 700, "and the saved SIZE (this window can be resized)", stamp)
+  reaper.DeleteExtState("tjingboem_WindowPlace", "place_ReaNvelopes", true)
+end
 local ids = reaper.GetExtState("ReaNvelopes_Windows", "ids")
 report(ids ~= "", "the open window is in the registry", ids)
 

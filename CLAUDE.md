@@ -202,3 +202,11 @@ tjingboem (screenshot of "Selected item has no take FX envelope lane"): he HAD s
   The deletion is part of the write's undo step.
 - Test: `tests/selftest_item22.lua` (14 checks, in a REAPER with ReaImGui, SWS, js_ReaScriptAPI): the envelope decides with an item still selected, the item's length as the range, a refusal with neither, replacing the
   item at the same time in both writers, items elsewhere and a partly overlapping one stay, a selected item on another lane keeps its selection.
+
+## Window place (19 November 2026) — BUILT, tested in a REAPER of its own, NOT yet seen on a real screen
+
+Corrections list item 21, fourth tool (ReaMaskM, ReaShapeM, ReaGestM, ReaNvelopes; design in ReaMaskM's CLAUDE.md). `lib/WindowPlace.lua` is the same file as in the other tools; without it the tool works as
+before. The hub window can be resized (within 510-900 x 500-1400, `SetNextWindowSizeConstraints`), so position AND size are applied on the first frame (Cond_Once, after the default 570 x 900 FirstUseEver call).
+`Place.frame(..., pinned)` runs right before the title-bar label (the pin), `Place.close()` when the window closes (and at exit). Windows that hand over to an open window (one window unless pinned) never get here:
+the hub returns before the context exists. Tests: `tests/selftest_place.lua` (copy, 31 checks in plain Lua), `tests/hub_smoke.lua` (the real hub is given the saved position and size, 15 checks);
+`tests/selftest_window.lua` (18) and `tests/selftest_item22.lua` (14) still pass.

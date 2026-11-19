@@ -92,9 +92,27 @@ local EXT_KEY = "ReaNvelopes_MAIN"
 local popupText = nil   -- the message in the open popup window
 local ctx = reaper.ImGui_CreateContext(script_name)
 
+-- Window place (19 November 2026, corrections list item 21): the window opens where the ReaNvelopes window was last dragged to (and at the size it was
+-- left at), unless a pinned window is there; see lib/WindowPlace.lua. Without that file the tool works as before.
+local Place = (function()
+  local ok, mod = pcall(dofile, _script_path .. "lib/WindowPlace.lua")
+  if ok and type(mod) == "table" then return mod.new("ReaNvelopes") end
+  return nil
+end)()
+local place_applied = false
+if Place then reaper.atexit(Place.close) end
+
 local function loop()
   reaper.ImGui_SetNextWindowSizeConstraints(ctx, 510, 500, 900, 1400)   -- 50 % wider than the first version (340, 600)
   reaper.ImGui_SetNextWindowSize(ctx, 570, 900, reaper.ImGui_Cond_FirstUseEver())
+  if Place and not place_applied then            -- the first frame: where this tool's window was last dragged to, at the size it was left at (nil: the system decides)
+    place_applied = true
+    local r = Place.initial()
+    if r then
+      reaper.ImGui_SetNextWindowPos(ctx, r.x, r.y, reaper.ImGui_Cond_Once())
+      reaper.ImGui_SetNextWindowSize(ctx, r.w, r.h, reaper.ImGui_Cond_Once())
+    end
+  end
   reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_WindowBg(), Theme.hx(Theme.C_BG_MAIN))
 
   -- what another window handed over (a window that was started while this one was open): load it and come to the front
@@ -119,6 +137,11 @@ local function loop()
     -- "tjingboem productions" in the title bar, right: also the PIN (19 Nov 2026, as in ReaMaskM, ReaShapeM, ReaGestM). A click pins
     -- the window (it stops following the selection and stays open next to a new window); another click lets go. Blue when pinned.
     ----------------------------------------------------------------------
+    if Place then
+      local px, py = reaper.ImGui_GetWindowPos(ctx)
+      local pw, ph = reaper.ImGui_GetWindowSize(ctx)
+      Place.frame(px, py, pw, ph, pinned)             -- a pinned window never sets the place of the next one
+    end
     do
       local label     = "tjingboem productions"
       local label_col = reaper.ImGui_ColorConvertDouble4ToU32(0.55, 0.55, 0.55, 1.0)
@@ -217,6 +240,7 @@ local function loop()
     reaper.defer(loop)
   else
     reg.unregister()
+    if Place then Place.close() end
   end
   if not open and reaper.ImGui_DestroyContext then
     reaper.ImGui_DestroyContext(ctx)
