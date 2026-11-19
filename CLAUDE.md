@@ -188,3 +188,17 @@ tjingboem: add the pin and the follow to ReaNvelopes, and "1 window is allowed e
   `tests/hub_smoke.lua` (13 checks with the REAL hub drawing frames: starts, follows an item, a second hub hands over and does not open, a pinned window is left
   alone). Not tested: the click on the label, the focus change, the tab switching on screen.
 
+
+## Corrections item 22: the selected envelope decides, and a write replaces (19 November 2026) — BUILT, tested in a REAPER of its own, waiting for tjingboem's test
+
+tjingboem (screenshot of "Selected item has no take FX envelope lane"): he HAD selected the envelope lane; and a write into a lane that already had an automation item "adds to the existing one".
+- `EnvWriter.resolveTarget` (RAND and OSC): new Case 0 at the top: when the selected envelope is a TRACK envelope (`I_TAKEENVELOPE ~= 1`) it decides, whatever media item is still selected (that was the bug:
+  Case 1 looked at the selected item first and refused). Range: the time selection; without one, the selected item's own length; without either: "Set a time selection (the envelope lane is selected)".
+  The message for "an item is selected but no lane" now says what to do ("Click the name of an envelope lane (track panel) and set a time selection"). The generic writer (`CurveOut.selectedEnvelope`) never had the problem.
+- Replace: `EnvWriter.removeAutomationItemsIn(env, ts_s, ts_e)` deletes every automation item of that envelope that lies COMPLETELY inside the range before the new one is made (called by
+  `finalizeAutomationItem`, so RAND, OSC and DRAW's own writers, and by `CurveOut.commitEnvelope`, the generic one). An item that only OVERLAPS the range stays (the new item lies on top of it) — tjingboem has
+  not said what he wants there. REAPER has no function to delete an automation item, only the action 42086 "Envelope: Delete automation items", which deletes the SELECTED ones of the whole project, so the
+  selection of every other automation item is put aside and restored (the new item itself is selected by REAPER's own InsertAutomationItem, which drops the others' selection: not ours to keep).
+  The deletion is part of the write's undo step.
+- Test: `tests/selftest_item22.lua` (14 checks, in a REAPER with ReaImGui, SWS, js_ReaScriptAPI): the envelope decides with an item still selected, the item's length as the range, a refusal with neither, replacing the
+  item at the same time in both writers, items elsewhere and a partly overlapping one stay, a selected item on another lane keeps its selection.

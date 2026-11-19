@@ -390,6 +390,7 @@ function M.commitEnvelope(curve, opts)
 
   reaper.Undo_BeginBlock()
   reaper.PreventUIRefresh(1)
+  if useAI then require("EnvWriter").removeAutomationItemsIn(env, startTime, startTime + lenTime) end   -- replace what is there (item 22)
   -- An automation item collects the points that lie in its range, so what is already there is cleared first
   -- in that case whatever "clear" says.
   if opts.clear ~= false or useAI then
