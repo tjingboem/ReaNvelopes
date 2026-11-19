@@ -168,3 +168,23 @@ The note editor (`ReaCompose_EDITOR.lua`, `EDITORState`, `EDITORPresets`), `SCOR
 - Applying a curve to the pitch, length or channel of notes (planned for ReaAC once this is settled).
 - Credit and license: sailok is okay with the use of ReaCurve code (a message, not in writing); the LICENSE here is the
   same placeholder as ReaComposeM's. Read the upstream license before this goes to other people.
+
+## Pin, follow and one window (19 November 2026) — BUILT, tested with the real hub in a REAPER of its own, NOT yet seen in the real window
+
+tjingboem: add the pin and the follow to ReaNvelopes, and "1 window is allowed except when pinned".
+- Pin: the "tjingboem productions" label in the title bar (added here; a click toggles, blue when pinned), as in ReaMaskM, ReaShapeM and ReaGestM. Pinned, the
+  window stops following the selection and a new window opens next to it. (ReaNvelopes writes to whatever is selected or to the chosen lane; the pin does not
+  bind a target, it only keeps the window's settings.)
+- Follow (`lib/ItemFollow.lua`): a window launched by ReaSnap (project identity known) loads the settings of the selected media item, or else the selected
+  automation item of the selected envelope, when the selection changes (`apply_state` in the hub: generator settings, OUTPUT settings, that generator's tab).
+  An item without ReaNvelopes settings leaves the window as it is; a window opened from the Actions list never follows.
+- One window (`lib/WindowRegistry.lua`): every open window renews a time stamp and its pin state in ExtState (section ReaNvelopes_Windows) from its OWN frame
+  loop (at most twice a second, nothing in the background; stamps older than 2 s count as gone). A window started while another UNPINNED one is open does not
+  open: it hands over what it was started with (ReaSnap's S settings, or nothing) and ends; the open window loads that and comes to the front. NOTE: ReaSnap's
+  CLAUDE.md says "don't reintroduce heartbeat code" (about tracking liveness from ReaSnap's side); this is the window's own stamp, asked for by tjingboem.
+  It only works when REAPER's "Terminate or New instance?" dialog is answered "New instance" (tick Remember): the script has to start to be able to hand over.
+  ReaSnap: `SINGLE_INSTANCE_SCRIPTS.ReaNvelopes = true`, so a Restore launches it once.
+- Tests (in a REAPER with ReaImGui, SWS, js_ReaScriptAPI, RT_EXT=1 in the runner): `tests/selftest_window.lua` (18 checks: registry, stale stamps, what is followed) and
+  `tests/hub_smoke.lua` (13 checks with the REAL hub drawing frames: starts, follows an item, a second hub hands over and does not open, a pinned window is left
+  alone). Not tested: the click on the label, the focus change, the tab switching on screen.
+

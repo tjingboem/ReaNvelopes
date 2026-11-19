@@ -327,6 +327,21 @@ function M.b64_encode(encoded)
   return table.concat(out)
 end
 
+function M.b64_decode(s)
+  local rev = {}
+  for i = 1, 64 do rev[B64:byte(i)] = i - 1 end
+  s = s:gsub("[^%w%+/=]", "")
+  local out = {}
+  for i = 1, #s, 4 do
+    local a, b, c, d = s:byte(i, i + 3)
+    local n = ((rev[a] or 0) << 18) | ((rev[b] or 0) << 12) | ((rev[c] or 0) << 6) | (rev[d] or 0)
+    out[#out + 1] = string.char((n >> 16) & 255)
+    if c ~= 61 then out[#out + 1] = string.char((n >> 8) & 255) end
+    if d ~= 61 then out[#out + 1] = string.char(n & 255) end
+  end
+  return table.concat(out)
+end
+
 function M.write_item_state(item, tool, encoded)
   return reaper.GetSetMediaItemInfo_String(item, "P_EXT:" .. tool .. "_ItemSettings", "b64:" .. M.b64_encode(encoded), true)
 end

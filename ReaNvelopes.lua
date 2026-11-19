@@ -41,16 +41,33 @@ package.path =
 local Theme     = require("Theme")
 local Logger    = require("Logger")
 local ReaSnap   = require("ReaSnap_Integration")   -- window title and Close All (ReaSnap Integration Contract pieces 2, 5)
+local Serial       = require("ReaNvelopes_Serial")
+local WindowRegistry = require("WindowRegistry")
+local ItemFollow   = require("ItemFollow")
+
+-- One window is enough, except when pinned (tjingboem, 19 November 2026). A window that is started while another, UNPINNED window is
+-- open does not open: it hands what it was started with over to that window and ends. A pinned window is left alone. See WindowRegistry.
+local reg = WindowRegistry.new()
+do
+  local other = reg.other_unpinned_alive()
+  if other then
+    WindowRegistry.hand_over(other, ReaSnap.pending_state and Serial.encode(ReaSnap.pending_state) or "")
+    return
+  end
+end
+reg.register()
+reaper.atexit(reg.unregister)
 local RAND_Tool = require("ReaNvelopes_RAND")
 local OSC_Tool  = nil
 local DRAW_Tool = nil
 
 -- ReaSnap Integration Contract piece 4: a launch by ReaSnap with settings (S button, Restore): the generator's settings
 -- and the OUTPUT settings are applied before the first frame, and the tab of that generator is the one shown first.
+-- The same function loads the settings of an item the window follows (see ItemFollow), and what another window hands over.
 local select_tab = nil
-do
-  local st = ReaSnap.pending_state
-  local preset_module = st and ({ RAND = "RANDPresets", OSC = "OSCPresets", DRAW = "DRAWPresets" })[st.tool]
+local function apply_state(st)
+  if type(st) ~= "table" then return end
+  local preset_module = ({ RAND = "RANDPresets", OSC = "OSCPresets", DRAW = "DRAWPresets" })[st.tool]
   if preset_module then
     local ok, P = pcall(require, preset_module)
     if ok and P and P.applyData and type(st.gen) == "table" then P.applyData(st.gen) end
@@ -59,6 +76,7 @@ do
     select_tab = st.tool
   end
 end
+apply_state(ReaSnap.pending_state)
 
 local function tab_flags(tool)   -- the selected tab for the first frame only
   if select_tab == tool then
@@ -68,6 +86,8 @@ local function tab_flags(tool)   -- the selected tab for the first frame only
   return 0
 end
 
+local pinned = false        -- the title-bar label toggles it
+local shown_key = nil       -- what the window last followed (ItemFollow)
 local EXT_KEY = "ReaNvelopes_MAIN"
 local popupText = nil   -- the message in the open popup window
 local ctx = reaper.ImGui_CreateContext(script_name)
@@ -77,12 +97,60 @@ local function loop()
   reaper.ImGui_SetNextWindowSize(ctx, 570, 900, reaper.ImGui_Cond_FirstUseEver())
   reaper.ImGui_PushStyleColor(ctx, reaper.ImGui_Col_WindowBg(), Theme.hx(Theme.C_BG_MAIN))
 
+  -- what another window handed over (a window that was started while this one was open): load it and come to the front
+  do
+    local payload = reg.take_handover()
+    if payload then
+      if payload ~= "" then
+        local ok_d, st = pcall(Serial.decode, payload)
+        if ok_d then apply_state(st) end
+      end
+      reaper.ImGui_SetNextWindowFocus(ctx)
+    end
+  end
+
   local visible, open = reaper.ImGui_Begin(ctx, ReaSnap.windowTitle(script_name), true)
 
   -- ReaSnap's Close All: checked outside the visible gate, so it also works while the window is collapsed.
   if ReaSnap.shouldClose() then open = false end
 
   if visible then
+    ----------------------------------------------------------------------
+    -- "tjingboem productions" in the title bar, right: also the PIN (19 Nov 2026, as in ReaMaskM, ReaShapeM, ReaGestM). A click pins
+    -- the window (it stops following the selection and stays open next to a new window); another click lets go. Blue when pinned.
+    ----------------------------------------------------------------------
+    do
+      local label     = "tjingboem productions"
+      local label_col = reaper.ImGui_ColorConvertDouble4ToU32(0.55, 0.55, 0.55, 1.0)
+      if pinned then label_col = reaper.ImGui_ColorConvertDouble4ToU32(0.30, 0.60, 0.95, 1.0) end
+      local dl        = reaper.ImGui_GetForegroundDrawList(ctx)
+      local wx, wy    = reaper.ImGui_GetWindowPos(ctx)
+      local ww        = reaper.ImGui_GetWindowWidth(ctx)
+      local lw, lh    = reaper.ImGui_CalcTextSize(ctx, label)
+      local title_h   = reaper.ImGui_GetFrameHeight(ctx)
+      local tx        = wx + ww - lw - 30
+      local ty        = wy + (title_h - lh) * 0.5
+      if reaper.ImGui_IsMouseClicked(ctx, 0) and reaper.ImGui_IsWindowHovered(ctx) then
+        local mx, my = reaper.ImGui_GetMousePos(ctx)
+        if mx >= tx and mx <= tx + lw and my >= ty and my <= ty + lh then pinned = not pinned end
+      end
+      reaper.ImGui_DrawList_AddText(dl, tx, ty, label_col, label)
+    end
+
+    -- Follow the selection (19 Nov 2026, as ReaMaskM and ReaGestM): a window that ReaSnap launched (it has a project identity) loads the
+    -- settings of the selected item, or of the selected automation item, when the selection changes. Pinned, it does not. A window opened
+    -- from the Actions list never follows, so what is being edited is not replaced because some other item was selected.
+    if ReaSnap.project_identity and not pinned then
+      local key, encoded = ItemFollow.read_current()
+      if key ~= shown_key then
+        shown_key = key
+        if encoded and encoded ~= "" then
+          local ok_d, st = pcall(Serial.decode, encoded)
+          if ok_d then apply_state(st) end
+        end
+      end
+    end
+
     if reaper.ImGui_BeginTabBar(ctx, "ReaNvelopesTabs") then
       if reaper.ImGui_BeginTabItem(ctx, "RAND", nil, tab_flags("RAND")) then
         RAND_Tool.drawUI(ctx)
@@ -145,8 +213,12 @@ local function loop()
   reaper.ImGui_PopStyleColor(ctx)
 
   if open then
+    reg.heartbeat(pinned)
     reaper.defer(loop)
-  elseif reaper.ImGui_DestroyContext then
+  else
+    reg.unregister()
+  end
+  if not open and reaper.ImGui_DestroyContext then
     reaper.ImGui_DestroyContext(ctx)
   end
 end
