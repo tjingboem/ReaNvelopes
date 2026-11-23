@@ -100,6 +100,13 @@ function M.applyState(out)
   end
 end
 
+-- A curve that was written into the project is also filed in ReaCat (tag "written") and marked as used by the place it went to.
+-- A failure here must never hide that the write itself worked.
+local function fileCopy(name, points, hold, getControl, place)
+  local ok = pcall(function() ReaCatSend.fileWritten(points, hold, name, getControl and getControl(), place) end)
+  return ok
+end
+
 local function doCommit(name, points, writeEnvelope, hold, getControl, getToolState)
   if S.target == 4 then   -- Send to ReaCat and the world: the curve as shown (flips included), no time selection needed
     local ok, n = ReaCatSend.send(points, hold, name, getControl and getControl())
@@ -110,7 +117,10 @@ local function doCommit(name, points, writeEnvelope, hold, getControl, getToolSt
   if S.target == 1 and writeEnvelope then
     EnvWriter.lastAI = nil
     writeEnvelope()
-    if EnvWriter.lastAI then rememberOnAutomationItem(EnvWriter.lastAI.env, EnvWriter.lastAI.idx, name, getToolState) end
+    if EnvWriter.lastAI then
+      rememberOnAutomationItem(EnvWriter.lastAI.env, EnvWriter.lastAI.idx, name, getToolState)
+      fileCopy(name, points, hold, getControl, { what = "ai", env = EnvWriter.lastAI.env, idx = EnvWriter.lastAI.idx })
+    end
     return
   end
   local curve, startBeats, rangeS, rangeE = buildCurve(points, hold)
@@ -124,6 +134,7 @@ local function doCommit(name, points, writeEnvelope, hold, getControl, getToolSt
     local ok, err, envName, count, madeAI, aiEnv, aiIdx = CurveOut.commitEnvelope(curve, { name = name, thin = S.thinPct / 100.0,
       clear = true, automationItem = true, rangeStart = rangeS, rangeEnd = rangeE })
     if ok and madeAI then rememberOnAutomationItem(aiEnv, aiIdx, name, getToolState) end
+    if ok then fileCopy(name, points, hold, getControl, madeAI and { what = "ai", env = aiEnv, idx = aiIdx } or { what = "param", key = tostring(envName) }) end
     if ok then Logger.ok(string.format("✔ %d points to \"%s\"%s", count, tostring(envName), madeAI and " (automation item)" or ""))
     else Logger.error("⚠  " .. tostring(err)) end
     return
@@ -140,11 +151,13 @@ local function doCommit(name, points, writeEnvelope, hold, getControl, getToolSt
     opts.threshold, opts.invert = S.threshold / 100.0, S.invert
     local ok, err, item, count = CurveOut.commitNoteValue(curve, opts)
     if ok then rememberOnItem(item, name, getToolState) end
+    if ok and item then fileCopy(name, points, hold, getControl, { what = "item", item = item }) end
     if ok then Logger.ok(string.format("✔ %s set on %d notes", (VALUES:match("^" .. string.rep("[^%z]*%z", S.value - 1) .. "([^%z]*)%z") or "Value"), count))
     else Logger.error("⚠  " .. tostring(err)) end
   else
     local ok, err, item, count = CurveOut.commitCC(curve, opts)
     if ok then rememberOnItem(item, name, getToolState) end
+    if ok and item then fileCopy(name, points, hold, getControl, { what = "item", item = item }) end
     if ok then Logger.ok(string.format("✔ %d MIDI events written", count)) else Logger.error("⚠  " .. tostring(err)) end
   end
 end

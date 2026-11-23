@@ -215,3 +215,6 @@ the hub returns before the context exists. Tests: `tests/selftest_place.lua` (co
 OUTPUT target 4 was "Send to ReaMaskM / ReaShapeM"; it is now **"Send to ReaCat and the world"** (button SEND TO REACAT). `lib/ReaCatSend.lua` fits the curve (`CurveShare.encodeControl` / `encode`)
 and stores it in the ReaCat catalogue (`lib/ReaCat.lua`, an identical copy of ReaCat's own; spec in `~/Claude/ReaCat/doc/ReaCat_Spec.md`): source ReaNvelopes, name RAND / OSC / DRAW, the REAPER project name as a fixed tag.
 TEMPORARY: it still writes the old one-slot place too, so ReaMaskM / ReaShapeM "Take Curve from ReaNvelopes" keep working until they take curves from ReaCat. The manual (`doc/ReaNvelopes_Manual.odt`) still says "Send to ReaMaskM / ReaShapeM": to update.
+
+## A write also files a copy in ReaCat (23 November 2026) — BUILT, tested offline and in a REAPER of its own (selftest_written 11, hub_smoke 15), NOT used by tjingboem, NOT committed
+After a successful write (MIDI CC, note values, both envelope writers) `OutputPanel` calls `ReaCatSend.fileWritten`: the curve is filed in ReaCat (tag `written`) and marked as used by the item or automation item; the item's notes get one `ReaCat: ...` line (the name suffix is a ReaCat setting, off by default). A failure never hides the write; a failed write files nothing.

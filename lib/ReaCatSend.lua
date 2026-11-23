@@ -33,17 +33,49 @@ local function pointsOf(text)
   return pts
 end
 
--- points / hold / name / control as CurveShare.send takes them. Returns true, number of points, id  or  false, message.
-function M.send(points, hold, name, control)
+local function encoded(points, hold, name, control)
   local text, n
   if control and #control >= 2 then text, n = CurveShare.encodeControl(control, name)
   else text, n = CurveShare.encode(points, hold, name) end
+  return text, n
+end
+
+-- points / hold / name / control as CurveShare.send takes them. Returns true, number of points, id  or  false, message.
+function M.send(points, hold, name, control)
+  local text, n = encoded(points, hold, name, control)
   if not text then return false, n end
   local source, short = splitName(name)
   local id, err = ReaCat.send{ kind = "curve", source = source, name = short, points = pointsOf(text) }
   if not id then return false, err end
   CurveShare.send(points, hold, name, control)          -- TEMPORARY, see the header
   return true, n, id
+end
+
+-- A curve that was WRITTEN into the project (an automation item, MIDI CC, note values) is filed in ReaCat too (tag "written") and marked as used
+-- by the place it went to (spec section 11). place = { what = "item", item = <MediaItem> }  or  { what = "ai", env = <envelope>, idx = <index> }
+-- or { what = "param", key = "..." }. Never makes trouble for the write: returns id, or nil and the reason.
+function M.fileWritten(points, hold, name, control, place)
+  local text, n = encoded(points, hold, name, control)
+  if not text then return nil, n end
+  local source, short = splitName(name)
+  local id, err = ReaCat.send{ kind = "curve", source = source, name = short, points = pointsOf(text), tags = "written" }
+  if not id then return nil, err end
+  local entry = ReaCat.get(id)
+  if not entry or not place then return id end
+  if place.what == "item" and place.item then
+    ReaCat.markItem(place.item, entry, { tool = "ReaNvelopes" })
+  else
+    local key = place.key
+    if place.what == "ai" and place.env then
+      local g = ""
+      if reaper.GetSetEnvelopeInfo_String then
+        for _, v in ipairs({ reaper.GetSetEnvelopeInfo_String(place.env, "GUID", "", false) }) do if type(v) == "string" then g = v end end
+      end
+      key = "ai:" .. g .. ":" .. tostring(place.idx or 0)
+    end
+    ReaCat.useAdd{ hash = entry.hash, what = place.what or "param", guid = key or "", tool = "ReaNvelopes", label = entry.source .. " " .. entry.name }
+  end
+  return id
 end
 
 return M
