@@ -218,3 +218,6 @@ TEMPORARY: it still writes the old one-slot place too, so ReaMaskM / ReaShapeM "
 
 ## A write also files a copy in ReaCat (23 November 2026) — BUILT, tested offline and in a REAPER of its own (selftest_written 11, hub_smoke 15), NOT used by tjingboem, NOT committed
 After a successful write (MIDI CC, note values, both envelope writers) `OutputPanel` calls `ReaCatSend.fileWritten`: the curve is filed in ReaCat (tag `written`) and marked as used by the item or automation item; the item's notes get one `ReaCat: ...` line (the name suffix is a ReaCat setting, off by default). A failure never hides the write; a failed write files nothing.
+
+## Manual (23 Nov 2026)
+`doc/ReaNvelopes_Manual.odt`: section 6.4 now "Target: send to ReaCat and the world" (button SEND TO REACAT, Latest / ReaCat... in the receiving tools), a paragraph "Filed in ReaCat" in 3.4, the table cell. Patched by `~/Claude/ReaCat/doc/manual_src/patch_other_manuals.py`; backup `doc/ReaNvelopes_Manual.odt.bak-2026-11-23-preReaCat` (untracked); not rendered, PDF not regenerated.
