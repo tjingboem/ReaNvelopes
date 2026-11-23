@@ -1,13 +1,10 @@
 -- ============================================================
 --   ReaCatSend.lua  —  "Send to ReaCat and the world" for ReaNvelopes' OUTPUT section.
---   The curve is fitted by CurveShare (control points with their shapes, bezier segments as cubic pieces), then stored in the
+--   The curve is fitted by CurveFit (control points with their shapes, bezier segments as cubic pieces), then stored in the
 --   ReaCat catalogue (lib/ReaCat.lua, spec: ReaCat/doc/ReaCat_Spec.md).
---
---   TEMPORARY: the same curve is also put in the old one-slot place (CurveShare.send) until ReaMaskM and ReaShapeM take their
---   curves from ReaCat (migration step 5); then that call and CurveShare.lua go (step 6).
 -- ============================================================
 
-local CurveShare = require("CurveShare")
+local CurveFit = require("CurveFit")
 local ReaCat = require("ReaCat")
 
 local M = {}
@@ -35,19 +32,18 @@ end
 
 local function encoded(points, hold, name, control)
   local text, n
-  if control and #control >= 2 then text, n = CurveShare.encodeControl(control, name)
-  else text, n = CurveShare.encode(points, hold, name) end
+  if control and #control >= 2 then text, n = CurveFit.encodeControl(control, name)
+  else text, n = CurveFit.encode(points, hold, name) end
   return text, n
 end
 
--- points / hold / name / control as CurveShare.send takes them. Returns true, number of points, id  or  false, message.
+-- points / hold / name / control: the preview points, whether it is a staircase, "ReaNvelopes: RAND", and the control points of the shape (or nil). Returns true, number of points, id  or  false, message.
 function M.send(points, hold, name, control)
   local text, n = encoded(points, hold, name, control)
   if not text then return false, n end
   local source, short = splitName(name)
   local id, err = ReaCat.send{ kind = "curve", source = source, name = short, points = pointsOf(text) }
   if not id then return false, err end
-  CurveShare.send(points, hold, name, control)          -- TEMPORARY, see the header
   return true, n, id
 end
 

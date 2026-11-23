@@ -240,7 +240,7 @@ end
 -- Control points for SEND CURVE: the points as they are, with the shape of the segment that
 -- leaves each point (0 linear, 1 step, 2 slow start+end, 3 fast start, 4 fast end).
 -- Shape 5 (bezier with tension) has no simple twin in the receivers: that segment travels as
--- `n` samples (p.samples), which CurveShare fits with a few cubic segments.
+-- `n` samples (p.samples), which CurveFit fits with a few cubic segments.
 function M.controlForSend(pts, n)
   n = n or 48
   local out = {}

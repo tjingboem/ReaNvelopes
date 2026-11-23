@@ -1,7 +1,9 @@
 -- ============================================================
---   CurveShare.lua
---   Sends the current curve to the other tools of the family.
---   The format is plain text, the same for every tool:
+--   CurveFit.lua  (was CurveShare.lua until 23 November 2026)
+--   Fits a curve for sending to ReaCat: the control points of a shape as they are, or a dense curve as a few cubic pieces, written as the plain
+--   text lines of the ReaCurve 1 form below, which lib/ReaCatSend.lua reads back into points. The old way of sharing a curve, one slot in REAPER's
+--   ExtState (section "tjingboem_curve", key "current") that ReaMaskM and ReaShapeM read, is gone: the curves travel through the ReaCat catalogue.
+--   The text form:
 --
 --     ReaCurve 1
 --     name=ReaNvelopes: RAND
@@ -16,14 +18,10 @@
 --   fifth number ("t,v,5,c1,c2": the handles sit a third and two thirds across the segment, at the
 --   levels c1 and c2, all 0..1). A receiver lays the curve over the whole X axis and the
 --   whole Y axis of its active envelope: v = 0 is the bottom, v = 1 the top, taken
---   as sent. What the values mean is the user's choice, made here.
---   It travels through REAPER's ExtState (section "tjingboem_curve", key "current",
---   persistent; stored on one line, the lines joined with ";", so that it survives a restart).
+--   as sent. What the values mean is the user's choice, made in the tool that makes the curve.
 -- ============================================================
 
 local M = {}
-
-M.SECTION, M.KEY = "tjingboem_curve", "current"
 
 
 -- Cubic fit. One segment of the samples p[a..b] becomes a cubic bezier with its handles a third and
@@ -156,16 +154,5 @@ function M.encode(points, hold, name)
   return table.concat(lines, "\n") .. "\n", #out
 end
 
--- control: [{tn, v, shape}] when the tool has real control points, else nil (dense samples are used)
-function M.send(points, hold, name, control)
-  local text, n
-  if control and #control >= 2 then text, n = M.encodeControl(control, name)
-  else text, n = M.encode(points, hold, name) end
-  if not text then return false, n end
-  -- One line: REAPER writes a persistent value to its .ini file only up to the first line break, so the
-  -- lines are joined with ";" (the receivers read ";" and line breaks alike).
-  reaper.SetExtState(M.SECTION, M.KEY, (text:gsub("\r?\n", ";")), true)
-  return true, n
-end
 
 return M

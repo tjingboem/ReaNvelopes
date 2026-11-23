@@ -49,7 +49,7 @@ check("the tool tag and a shape word are on it", (function()
   for _, t in ipairs(e.tags) do have[t:lower()] = true end
   return have.reanvelopes and have.rand and (have.step or have.smooth)
 end)())
-check("TEMPORARY old slot is written too", (ext["tjingboem_curve/current"] or "") ~= "")
+check("the old one-slot place is gone: nothing is written there", (ext["tjingboem_curve/current"] or "") == "")
 
 -- dense samples (OSC) without control points
 local dense = {}

@@ -221,3 +221,6 @@ After a successful write (MIDI CC, note values, both envelope writers) `OutputPa
 
 ## Manual (23 Nov 2026)
 `doc/ReaNvelopes_Manual.odt`: section 6.4 now "Target: send to ReaCat and the world" (button SEND TO REACAT, Latest / ReaCat... in the receiving tools), a paragraph "Filed in ReaCat" in 3.4, the table cell. Patched by `~/Claude/ReaCat/doc/manual_src/patch_other_manuals.py`; backup `doc/ReaNvelopes_Manual.odt.bak-2026-11-23-preReaCat` (untracked); not rendered, PDF not regenerated.
+
+## The old one-slot place is gone (23 November 2026) — tested, NOT committed
+`lib/CurveShare.lua` was renamed `lib/CurveFit.lua` and keeps only the fitting (`encode`, `encodeControl`); the ExtState slot `tjingboem_curve/current`, `CurveShare.send` and the extra write in `ReaCatSend.send` are removed: ReaMaskM and ReaShapeM take their curves from ReaCat only. Test: `tests/test_reacat_send.lua` checks that nothing is written to the old place.
