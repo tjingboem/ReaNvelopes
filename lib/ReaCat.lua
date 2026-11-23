@@ -20,7 +20,7 @@ M.DEFAULT_CLEANUP = 2000
 
 local SECTION = "ReaCat"
 local KNOWN = { kind = true, source = true, name = true, saved = true, sent = true, beats = true, range = true,
-                unit = true, tags = true, note = true, fav = true, rulekind = true, hash = true, seq = true, project = true }
+                unit = true, tags = true, note = true, fav = true, rulekind = true, hash = true, seq = true, project = true, npoints = true }
 
 local dirOverride
 function M.setDir(path) dirOverride = path end     -- tests, or a user who wants the catalogue elsewhere
@@ -175,6 +175,7 @@ end
 local function serialize(e)
   local L = { "ReaCat 1", "kind=" .. e.kind, "source=" .. e.source, "name=" .. e.name, "saved=" .. e.saved, "sent=" .. e.sent }
   if e.project and e.project ~= "" then L[#L + 1] = "project=" .. oneLine(e.project) end
+  if e.npoints then L[#L + 1] = string.format("npoints=%d", e.npoints) end
   if e.beats then L[#L + 1] = string.format("beats=%.10g", e.beats) end
   if e.range then L[#L + 1] = string.format("range=%.10g,%.10g", e.range[1], e.range[2]) end
   if e.unit and e.unit ~= "" then L[#L + 1] = "unit=" .. oneLine(e.unit) end
@@ -231,6 +232,7 @@ local function parse(text, headerOnly)
   e.hash = raw.hash or ""
   e.seq = tonumber(raw.seq)
   e.project = raw.project
+  e.npoints = tonumber(raw.npoints)
   if headerOnly then return e end
   if e.kind == "rule" then
     if marker ~= "text" then return nil, "a rule needs a text body" end
@@ -396,6 +398,7 @@ function M.send(t)
     local pts, err = checkPoints(t.points)
     if not pts then return nil, err end
     e.points, body = pts, pointsBody(pts)
+    e.npoints = #pts
     if t.beats ~= nil then
       e.beats = tonumber(t.beats)
       if not e.beats or e.beats <= 0 then return nil, "beats must be a positive number" end
