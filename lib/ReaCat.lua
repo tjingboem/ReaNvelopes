@@ -20,7 +20,7 @@ M.DEFAULT_CLEANUP = 2000
 
 local SECTION = "ReaCat"
 local KNOWN = { kind = true, source = true, name = true, saved = true, sent = true, beats = true, range = true,
-                unit = true, tags = true, note = true, fav = true, rulekind = true, hash = true, seq = true, project = true, npoints = true }
+                unit = true, tags = true, note = true, fav = true, rulekind = true, hash = true, seq = true, project = true, npoints = true, projectid = true }
 
 local dirOverride
 function M.setDir(path) dirOverride = path end     -- tests, or a user who wants the catalogue elsewhere
@@ -175,6 +175,7 @@ end
 local function serialize(e)
   local L = { "ReaCat 1", "kind=" .. e.kind, "source=" .. e.source, "name=" .. e.name, "saved=" .. e.saved, "sent=" .. e.sent }
   if e.project and e.project ~= "" then L[#L + 1] = "project=" .. oneLine(e.project) end
+  if e.projectid and e.projectid ~= "" then L[#L + 1] = "projectid=" .. oneLine(e.projectid) end
   if e.npoints then L[#L + 1] = string.format("npoints=%d", e.npoints) end
   if e.beats then L[#L + 1] = string.format("beats=%.10g", e.beats) end
   if e.range then L[#L + 1] = string.format("range=%.10g,%.10g", e.range[1], e.range[2]) end
@@ -232,6 +233,7 @@ local function parse(text, headerOnly)
   e.hash = raw.hash or ""
   e.seq = tonumber(raw.seq)
   e.project = raw.project
+  e.projectid = raw.projectid
   e.npoints = tonumber(raw.npoints)
   if headerOnly then return e end
   if e.kind == "rule" then
@@ -425,6 +427,7 @@ function M.send(t)
   e.note = t.note and tostring(t.note) or nil
   e.hash = fnv1a(kind .. "\n" .. body)
   e.project = (t.project and oneLine(t.project) ~= "") and oneLine(t.project) or M.projectName()
+  e.projectid = (t.projectid and oneLine(t.projectid) ~= "") and oneLine(t.projectid) or M.projectId()
 
   local dir = M.dir()
   ensureDir(dir)
@@ -438,8 +441,7 @@ function M.send(t)
 
   e.saved, e.sent = now, now
   e.seq = (tonumber(M.stamp()) or 0) + 1
-  local base, n, id = os.date("%Y%m%d_%H%M%S"), 1, nil
-  repeat id = string.format("%s_%03d", base, n) n = n + 1 until not fileExists(pathOf(id))
+  local id = M.newId()
   local ok, werr = writeFile(pathOf(id), serialize(e))
   if not ok then return nil, "could not write the catalogue: " .. tostring(werr) end
   reaper.SetExtState(SECTION, "last", id, false)
@@ -503,9 +505,199 @@ function M.cleanupCandidates(limit)
   return out, #all
 end
 
+-- ---------------------------------------------------------------- project id, restore, usage (spec section 11)
+
+local PROJ = "ReaCat"
+
+-- A hidden id of the REAPER project, made once and kept in the project's own ExtState; every send carries it as `projectid=`.
+-- (The visible name is not unique: every unsaved project is "Unsaved Project".) nil when REAPER cannot say.
+function M.projectId()
+  if not (reaper.GetProjExtState and reaper.SetProjExtState) then return nil end
+  local _, id = reaper.GetProjExtState(0, PROJ, "projectid")
+  if type(id) == "string" and id ~= "" then return id end
+  if reaper.genGuid then id = (reaper.genGuid(""):gsub("[{}]", "")) end
+  if type(id) ~= "string" or id == "" then
+    id = string.format("%08x%08x", os.time() & 0xffffffff, math.random(0, 0x7fffffff))
+  end
+  reaper.SetProjExtState(0, PROJ, "projectid", id)
+  return id
+end
+
+function M.newId()
+  local base, n, id = os.date("%Y%m%d_%H%M%S"), 1, nil
+  repeat id = string.format("%s_%03d", base, n) n = n + 1 until not fileExists(pathOf(id))
+  return id
+end
+
+local function contentHash(e)
+  if e.kind == "rule" then return fnv1a("rule\n" .. (e.text or "")) end
+  return fnv1a("curve\n" .. pointsBody(e.points or {}))
+end
+
+-- The text of an entry exactly as it is in its file (a snapshot stores it), or nil.
+function M.export(id) return readFile(pathOf(id)) end
+
+-- The entries of one project (by its hidden id) as { id, text }, oldest first: what a snapshot stores.
+function M.exportProject(projectid)
+  local out = {}
+  if not projectid or projectid == "" then return out end
+  local all = M.list()
+  for i = #all, 1, -1 do
+    if all[i].projectid == projectid then
+      local text = M.export(all[i].id)
+      if text then out[#out + 1] = { id = all[i].id, text = text } end
+    end
+  end
+  return out
+end
+
+-- Puts an entry back as it was (id, dates, tags, note, project and all), without making it the newest. Used by a snapshot's Restore.
+-- The same content already in the catalogue is not added twice: returns that id and "exists". Returns id, "added"  or  nil, message.
+function M.restore(id, text)
+  if type(text) ~= "string" then return nil, "no text" end
+  local e, err = parse(text, false)
+  if not e then return nil, err end
+  local hash = (e.hash ~= "" and e.hash) or contentHash(e)
+  for _, h in ipairs(M.list()) do
+    if h.hash == hash and h.source == e.source and h.name == e.name and h.kind == e.kind then return h.id, "exists" end
+  end
+  ensureDir(M.dir())
+  if type(id) ~= "string" or not id:match("^[%w_%-]+$") or fileExists(pathOf(id)) then id = M.newId() end
+  local ok, werr = writeFile(pathOf(id), (text:gsub("\r", "")):gsub("\n*$", "\n"))
+  if not ok then return nil, "could not write the catalogue: " .. tostring(werr) end
+  bump("edit")
+  return id, "added"
+end
+
+-- The usage record: which catalogue entry (by its content hash) was taken or written where in THIS project. Kept in the project's own
+-- ExtState (saved with the project): records separated by ";", fields by "|", the characters % ; | and line ends written %XX.
+local function enc(s) return (tostring(s or ""):gsub("[%%;|\r\n]", function(c) return string.format("%%%02X", c:byte()) end)) end
+local function dec(s) return (s:gsub("%%(%x%x)", function(h) return string.char(tonumber(h, 16)) end)) end
+local USAGE_MAX = 2000
+
+function M.usage()
+  local out = {}
+  if not reaper.GetProjExtState then return out end
+  local _, raw = reaper.GetProjExtState(0, PROJ, "usage")
+  for rec in ((raw or "") .. ";"):gmatch("([^;]*);") do
+    local f = {}
+    for x in (rec .. "|"):gmatch("([^|]*)|") do f[#f + 1] = dec(x) end
+    if f[1] and f[1] ~= "" then out[#out + 1] = { hash = f[1], what = f[2], guid = f[3], tool = f[4], label = f[5], date = f[6] } end
+  end
+  return out
+end
+
+local function writeUsage(list)
+  local parts = {}
+  for i = math.max(1, #list - USAGE_MAX + 1), #list do
+    local r = list[i]
+    parts[#parts + 1] = table.concat({ enc(r.hash), enc(r.what), enc(r.guid), enc(r.tool), enc(r.label), enc(r.date) }, "|")
+  end
+  reaper.SetProjExtState(0, PROJ, "usage", table.concat(parts, ";"))
+  bump("edit")
+end
+
+-- rec = { hash =, what = "item" | "ai" | "param", guid = (the item's GUID, or any key that names the place), tool =, label = }
+-- The same hash + what + guid + tool is one line (its date and label are renewed).
+function M.useAdd(rec)
+  if type(rec) ~= "table" or type(rec.hash) ~= "string" or rec.hash == "" then return nil, "no hash" end
+  if not (reaper.GetProjExtState and reaper.SetProjExtState) then return nil, "no project" end
+  local r = { hash = rec.hash, what = rec.what or "item", guid = rec.guid or "", tool = rec.tool or "", label = rec.label or "",
+              date = rec.date or os.date("%Y-%m-%d %H:%M:%S") }
+  local list = M.usage()
+  for i = #list, 1, -1 do
+    local x = list[i]
+    if x.hash == r.hash and x.what == r.what and x.guid == r.guid and x.tool == r.tool then table.remove(list, i) end
+  end
+  list[#list + 1] = r
+  writeUsage(list)
+  return true
+end
+
+-- hash -> how many places use it, in this project (what the red borders and `used:` need)
+function M.usedHashes()
+  local set = {}
+  for _, r in ipairs(M.usage()) do set[r.hash] = (set[r.hash] or 0) + 1 end
+  return set
+end
+
+function M.usedBy(hash)
+  local out = {}
+  for _, r in ipairs(M.usage()) do if r.hash == hash then out[#out + 1] = r end end
+  return out
+end
+
+-- Removes the lines whose place is gone. exists(record) -> true | false (the caller knows how to look: an item by its GUID, ...).
+function M.usePrune(exists)
+  local list, kept, removed = M.usage(), {}, 0
+  for _, r in ipairs(list) do
+    if exists(r) == false then removed = removed + 1 else kept[#kept + 1] = r end
+  end
+  if removed > 0 then writeUsage(kept) end
+  return removed
+end
+
+-- ---- the item side: a line in the item's NOTES, and, when the setting is on, a suffix in the item's name
+
+function M.nameSuffixOn() return reaper.GetExtState(SECTION, "name_suffix") == "1" end
+function M.setNameSuffixOn(on) reaper.SetExtState(SECTION, "name_suffix", on and "1" or "0", true) end
+
+local function notePrefix(e) return "ReaCat: " .. oneLine(e.source) .. " " .. oneLine(e.name) .. "," end
+
+-- The notes text with this entry's line in it (one line per curve: a newer take of the same source and name replaces its line).
+function M.noteWith(notes, e, date, project)
+  local line = notePrefix(e) .. " taken " .. (date or os.date("%Y-%m-%d %H:%M")) .. ", project " .. (project or M.projectName())
+  local prefix, out, done = notePrefix(e), {}, false
+  for l in ((notes or ""):gsub("\r", "") .. "\n"):gmatch("(.-)\n") do
+    if l:sub(1, #prefix) == prefix then
+      if not done then out[#out + 1] = line done = true end
+    else
+      out[#out + 1] = l
+    end
+  end
+  while #out > 0 and out[#out] == "" do out[#out] = nil end
+  if not done then out[#out + 1] = line end
+  return table.concat(out, "\n")
+end
+
+function M.nameWith(name, e)
+  local suffix = " + ReaCat: " .. oneLine(e.source) .. " " .. oneLine(e.name)
+  name = name or ""
+  if name:find(suffix, 1, true) then return name end
+  return name .. suffix
+end
+
+local function lastString(...)
+  local r = { ... }
+  for i = #r, 1, -1 do if type(r[i]) == "string" then return r[i] end end
+  return ""
+end
+
+-- A tool took or wrote this entry into a media item: the usage line, the notes line and, when the setting (or opts.nameSuffix) is on,
+-- the name suffix. entry = the entry as ReaCat.get gives it (hash, source, name). opts = { tool = "MinervaCL", nameSuffix = true | false }.
+function M.markItem(item, entry, opts)
+  opts = opts or {}
+  if not item or type(entry) ~= "table" or not entry.hash then return nil, "nothing to mark" end
+  local guid = lastString(reaper.GetSetMediaItemInfo_String(item, "GUID", "", false))
+  local ok, err = M.useAdd{ hash = entry.hash, what = "item", guid = guid, tool = opts.tool, label = entry.source .. " " .. entry.name }
+  if not ok then return nil, err end
+  local notes = lastString(reaper.GetSetMediaItemInfo_String(item, "P_NOTES", "", false))
+  reaper.GetSetMediaItemInfo_String(item, "P_NOTES", M.noteWith(notes, entry), true)
+  local suffix = opts.nameSuffix
+  if suffix == nil then suffix = M.nameSuffixOn() end
+  if suffix then
+    local take = reaper.GetActiveTake(item)
+    if take then
+      local name = lastString(reaper.GetSetMediaItemTakeInfo_String(take, "P_NAME", "", false))
+      reaper.GetSetMediaItemTakeInfo_String(take, "P_NAME", M.nameWith(name, entry), true)
+    end
+  end
+  return true, guid
+end
+
 -- ---------------------------------------------------------------- boolean search (spec 8.1)
 
-local FIELDS = { tag = true, source = true, name = true, note = true, project = true }
+local FIELDS = { tag = true, source = true, name = true, note = true, project = true, used = true }
 
 local function tokenize(s)
   local toks, i, n = {}, 1, #s
@@ -535,7 +727,10 @@ local function tokenize(s)
       local field, rest = w:match("^(%a+):(.*)$")
       field = field and field:lower()
       if field and FIELDS[field] then
-        if rest == "" then
+        if rest == "" and field == "used" then
+          toks[#toks + 1] = { t = "term", field = "used", text = "" }       -- `used:` alone: used in this project
+          i = j
+        elseif rest == "" then
           if s:sub(j, j) == '"' then
             i = quoted(j, field)
             if not i then return nil, "a quote is never closed" end
@@ -619,16 +814,17 @@ end
 
 local function has(hay, text) return hay:lower():find(text, 1, true) ~= nil end
 
-local function evalNode(n, h)
-  if n.op == "and" then return evalNode(n[1], h) and evalNode(n[2], h) end
-  if n.op == "or" then return evalNode(n[1], h) or evalNode(n[2], h) end
-  if n.op == "not" then return not evalNode(n[1], h) end
+local function evalNode(n, h, used)
+  if n.op == "and" then return evalNode(n[1], h, used) and evalNode(n[2], h, used) end
+  if n.op == "or" then return evalNode(n[1], h, used) or evalNode(n[2], h, used) end
+  if n.op == "not" then return not evalNode(n[1], h, used) end
   local f, text = n.field, n.text
   if f == "tag" then
     if h.project and h.project:lower() == text then return true end       -- the project name is a fixed tag
     for _, t in ipairs(h.tags or {}) do if t:lower() == text then return true end end
     return false
   elseif f == "project" then return has(h.project or "", text)
+  elseif f == "used" then return (used or {})[h.hash or ""] ~= nil
   elseif f == "source" then return has(h.source or "", text)
   elseif f == "name" then return has(h.name or "", text)
   elseif f == "note" then return has(h.note or "", text)
@@ -644,7 +840,8 @@ function M.query(text)
   if not toks then return nil, err end
   local tree, perr = parseQuery(toks)
   if not tree then return nil, perr end
-  return function(h) return evalNode(tree, h) end
+  local used = text:find("used:", 1, true) and M.usedHashes() or nil     -- looked up once per search, not per entry
+  return function(h) return evalNode(tree, h, used) end
 end
 
 return M
