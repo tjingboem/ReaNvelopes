@@ -28,7 +28,7 @@
 
 local M = {}
 
-local CurveShare = require("CurveShare")
+local ReaCatSend = require("ReaCatSend")   -- "Send to ReaCat and the world"
 local Curve    = require("Curve")
 local CurveOut = require("CurveOut")
 local EnvWriter = require("EnvWriter")
@@ -45,7 +45,7 @@ local S = {
 }
 M.state = S
 
-local TARGETS = "Parameter envelope (automation item)\0MIDI CC / pitch bend / pressure\0Note value (selected MIDI item)\0Send to ReaMaskM / ReaShapeM\0"
+local TARGETS = "Parameter envelope (automation item)\0MIDI CC / pitch bend / pressure\0Note value (selected MIDI item)\0Send to ReaCat and the world\0"
 local VALUES  = "Velocity\0Velocity off (lift)\0Duration\0Pitch\0Channel\0Mute\0"
 local VALUE_KEYS = { "velocity", "lift", "duration", "pitch", "channel", "mute" }
 local KINDS   = "CC\0Pitch bend\0Channel pressure\0"
@@ -101,9 +101,9 @@ function M.applyState(out)
 end
 
 local function doCommit(name, points, writeEnvelope, hold, getControl, getToolState)
-  if S.target == 4 then   -- Send to ReaMaskM / ReaShapeM: the curve as shown (flips included), no time selection needed
-    local ok, n = CurveShare.send(points, hold, name, getControl and getControl())
-    if ok then Logger.ok(string.format("✔ curve sent (%d points) — use Take Curve from ReaNvelopes in ReaMaskM or ReaShapeM", n))
+  if S.target == 4 then   -- Send to ReaCat and the world: the curve as shown (flips included), no time selection needed
+    local ok, n = ReaCatSend.send(points, hold, name, getControl and getControl())
+    if ok then Logger.ok(string.format("✔ sent to ReaCat and the world (%d points)", n))
     else Logger.error("⚠  " .. tostring(n)) end
     return
   end
@@ -223,7 +223,7 @@ function M.draw(ctx, name, getPoints, writeEnvelope, getControl, getToolState)
   local cur, hold = getPoints()
   local has_points = cur and #cur > 0
   if not has_points then reaper.ImGui_BeginDisabled(ctx) end
-  local label = (S.target == 1) and "WRITE TO ENVELOPE" or (S.target == 2) and "WRITE MIDI" or (S.target == 4) and "SEND CURVE" or "SET NOTE VALUES"
+  local label = (S.target == 1) and "WRITE TO ENVELOPE" or (S.target == 2) and "WRITE MIDI" or (S.target == 4) and "SEND TO REACAT" or "SET NOTE VALUES"
   reaper.ImGui_PushStyleVar(ctx, reaper.ImGui_StyleVar_FrameRounding(), 8)   -- round edges
   if reaper.ImGui_Button(ctx, label .. "##outwrite", -1, 36) then
     commit(name, cur, writeEnvelope, hold, getControl, getToolState)

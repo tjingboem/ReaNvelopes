@@ -210,3 +210,8 @@ before. The hub window can be resized (within 510-900 x 500-1400, `SetNextWindow
 `Place.frame(..., pinned)` runs right before the title-bar label (the pin), `Place.close()` when the window closes (and at exit). Windows that hand over to an open window (one window unless pinned) never get here:
 the hub returns before the context exists. Tests: `tests/selftest_place.lua` (copy, 31 checks in plain Lua), `tests/hub_smoke.lua` (the real hub is given the saved position and size, 15 checks);
 `tests/selftest_window.lua` (18) and `tests/selftest_item22.lua` (14) still pass.
+
+## Send to ReaCat and the world (23 November 2026) — BUILT, tested offline (14 checks) and with the real hub in a REAPER of its own, NOT yet used by tjingboem, NOT committed
+OUTPUT target 4 was "Send to ReaMaskM / ReaShapeM"; it is now **"Send to ReaCat and the world"** (button SEND TO REACAT). `lib/ReaCatSend.lua` fits the curve (`CurveShare.encodeControl` / `encode`)
+and stores it in the ReaCat catalogue (`lib/ReaCat.lua`, an identical copy of ReaCat's own; spec in `~/Claude/ReaCat/doc/ReaCat_Spec.md`): source ReaNvelopes, name RAND / OSC / DRAW, the REAPER project name as a fixed tag.
+TEMPORARY: it still writes the old one-slot place too, so ReaMaskM / ReaShapeM "Take Curve from ReaNvelopes" keep working until they take curves from ReaCat. The manual (`doc/ReaNvelopes_Manual.odt`) still says "Send to ReaMaskM / ReaShapeM": to update.
