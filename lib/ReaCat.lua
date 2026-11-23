@@ -495,13 +495,16 @@ function M.cleanupCandidates(limit)
   local all = M.list()
   local over = #all - limit
   if limit <= 0 or over <= 0 then return {}, #all end
-  local out = {}
+  -- the entries that are NOT used in this project come first (oldest first), the used ones only after them
+  local used, unused, inuse = M.usedHashes(), {}, {}
   for i = #all, 1, -1 do                                 -- oldest first
     if not all[i].fav then
-      out[#out + 1] = all[i]
-      if #out >= over then break end
+      if used[all[i].hash] then inuse[#inuse + 1] = all[i] else unused[#unused + 1] = all[i] end
     end
   end
+  local out = {}
+  for _, e in ipairs(unused) do if #out >= over then break end out[#out + 1] = e end
+  for _, e in ipairs(inuse) do if #out >= over then break end out[#out + 1] = e end
   return out, #all
 end
 
@@ -520,6 +523,7 @@ function M.projectId()
     id = string.format("%08x%08x", os.time() & 0xffffffff, math.random(0, 0x7fffffff))
   end
   reaper.SetProjExtState(0, PROJ, "projectid", id)
+  if reaper.MarkProjectDirty then reaper.MarkProjectDirty(0) end        -- SetProjExtState alone does not: without this the id could be lost on closing
   return id
 end
 
@@ -594,6 +598,7 @@ local function writeUsage(list)
     parts[#parts + 1] = table.concat({ enc(r.hash), enc(r.what), enc(r.guid), enc(r.tool), enc(r.label), enc(r.date) }, "|")
   end
   reaper.SetProjExtState(0, PROJ, "usage", table.concat(parts, ";"))
+  if reaper.MarkProjectDirty then reaper.MarkProjectDirty(0) end        -- SetProjExtState alone does not: REAPER would not ask to save the red borders
   bump("edit")
 end
 
@@ -635,6 +640,72 @@ function M.usePrune(exists)
   end
   if removed > 0 then writeUsage(kept) end
   return removed
+end
+
+-- ---- the places: finding a used place again, and selecting it
+
+local function envGuid(env)
+  for _, v in ipairs({ reaper.GetSetEnvelopeInfo_String(env, "GUID", "", false) }) do if type(v) == "string" then return v end end
+  return ""
+end
+
+-- The media item with this GUID, or nil.
+function M.findItem(guid)
+  if type(guid) ~= "string" or guid == "" or not reaper.CountMediaItems then return nil end
+  for i = 0, reaper.CountMediaItems(0) - 1 do
+    local item = reaper.GetMediaItem(0, i)
+    local g = ""
+    for _, v in ipairs({ reaper.GetSetMediaItemInfo_String(item, "GUID", "", false) }) do if type(v) == "string" then g = v end end
+    if g == guid then return item end
+  end
+  return nil
+end
+
+-- The automation item named by a usage key "ai:<envelope guid>:<index>": env, index, track  or nil.
+local function findAI(key)
+  local g, idx = tostring(key):match("^ai:(.-):(%d+)$")
+  if not g or g == "" or not reaper.CountTracks then return nil end
+  for t = 0, reaper.CountTracks(0) - 1 do
+    local tr = reaper.GetTrack(0, t)
+    for e = 0, reaper.CountTrackEnvelopes(tr) - 1 do
+      local env = reaper.GetTrackEnvelope(tr, e)
+      if envGuid(env) == g then
+        local n = tonumber(idx)
+        if n < reaper.CountAutomationItems(env) then return env, n, tr end
+        return nil
+      end
+    end
+  end
+  return nil
+end
+
+-- Does the place of a usage record still exist? (A parameter inside a tool cannot be looked up: it counts as there.)
+function M.placeExists(rec)
+  if rec.what == "item" then return M.findItem(rec.guid) ~= nil end
+  if rec.what == "ai" then return findAI(rec.guid) ~= nil end
+  return true
+end
+
+-- Selects the place in REAPER (an item, or an automation item) and moves the edit cursor to its start. Returns true, or false and why.
+function M.selectPlace(rec)
+  if rec.what == "item" then
+    local item = M.findItem(rec.guid)
+    if not item then return false, "that item is gone" end
+    reaper.SelectAllMediaItems(0, false)
+    reaper.SetMediaItemSelected(item, true)
+    reaper.SetEditCurPos(reaper.GetMediaItemInfo_Value(item, "D_POSITION"), true, false)
+    reaper.UpdateArrange()
+    return true
+  elseif rec.what == "ai" then
+    local env, n, tr = findAI(rec.guid)
+    if not env then return false, "that automation item is gone" end
+    reaper.SetOnlyTrackSelected(tr)
+    reaper.GetSetAutomationItemInfo(env, n, "D_UISEL", 1, true)
+    reaper.SetEditCurPos(reaper.GetSetAutomationItemInfo(env, n, "D_POSITION", 0, false), true, false)
+    reaper.UpdateArrange()
+    return true
+  end
+  return false, "this place is inside " .. (rec.tool ~= "" and rec.tool or "a tool") .. ", there is nothing to select"
 end
 
 -- ---- the item side: a line in the item's NOTES, and, when the setting is on, a suffix in the item's name
