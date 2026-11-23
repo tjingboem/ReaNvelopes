@@ -541,13 +541,16 @@ end
 -- The text of an entry exactly as it is in its file (a snapshot stores it), or nil.
 function M.export(id) return readFile(pathOf(id)) end
 
--- The entries of one project (by its hidden id) as { id, text }, oldest first: what a snapshot stores.
-function M.exportProject(projectid)
+-- The entries of one project (by its hidden id) as { id, text }, oldest first: what a snapshot stores. With includeUsed the entries that this
+-- project USES come too (their hash is in the project's usage record), also when another project made them.
+function M.exportProject(projectid, includeUsed)
   local out = {}
-  if not projectid or projectid == "" then return out end
+  local hasId = projectid and projectid ~= ""
+  if not hasId and not includeUsed then return out end
+  local used = includeUsed and M.usedHashes() or {}
   local all = M.list()
   for i = #all, 1, -1 do
-    if all[i].projectid == projectid then
+    if (hasId and all[i].projectid == projectid) or used[all[i].hash] then
       local text = M.export(all[i].id)
       if text then out[#out + 1] = { id = all[i].id, text = text } end
     end
@@ -564,6 +567,9 @@ function M.restore(id, text)
   local hash = (e.hash ~= "" and e.hash) or contentHash(e)
   for _, h in ipairs(M.list()) do
     if h.hash == hash and h.source == e.source and h.name == e.name and h.kind == e.kind then return h.id, "exists" end
+  end
+  if type(id) == "string" and id:match("^[%w_%-]+$") and fileExists(trashDir() .. "/" .. id .. M.EXT) then
+    return nil, "was deleted by the user"                 -- an entry in the trash stays gone: a Restore does not bring back what was deleted on purpose
   end
   ensureDir(M.dir())
   if type(id) ~= "string" or not id:match("^[%w_%-]+$") or fileExists(pathOf(id)) then id = M.newId() end
