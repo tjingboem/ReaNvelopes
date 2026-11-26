@@ -333,21 +333,23 @@ function M.get(id)
   return e
 end
 
--- ---- Detail: how many of the points of a curve a tool takes (26 Nov 2026, his request). The catalogue always keeps ALL the points of a curve;
--- the setting (a percentage, shared by every tool, kept between sessions) only decides what a tool is handed when it takes one. The points that
--- matter least to the shape go first (Visvalingam-Whyatt: the point whose triangle with its two neighbours is the smallest). Only a curve of
--- straight segments can be reduced; a curve that has steps or curved segments is taken as it is (those have few points anyway).
+-- ---- Resolution: the most points a tool takes of a curve (26 Nov 2026, his request; first made as a percentage "Detail"). The catalogue always keeps ALL
+-- the points of a curve; the setting (a number of points, 0 = no limit, shared by every tool, kept between sessions) only decides what a tool is
+-- handed when it takes one. The points that matter least to the shape go first (Visvalingam-Whyatt: the point whose triangle with its two neighbours
+-- is the smallest). Only a curve of straight segments can be reduced; a curve that has steps or curved segments is taken as it is (those have few
+-- points anyway).
 
-function M.detail()
-  local v = tonumber(reaper.GetExtState and reaper.GetExtState("ReaCat", "detail") or "")
-  if not v then return 100 end
-  return math.max(1, math.min(100, math.floor(v + 0.5)))
+function M.resolution()
+  local v = tonumber(reaper.GetExtState and reaper.GetExtState("ReaCat", "resolution") or "")
+  if not v or v < 2 then return 0 end
+  return math.floor(v + 0.5)
 end
 
-function M.setDetail(p)
-  p = math.max(1, math.min(100, math.floor((tonumber(p) or 100) + 0.5)))
-  if reaper.SetExtState then reaper.SetExtState("ReaCat", "detail", tostring(p), true) end
-  return p
+function M.setResolution(n)
+  n = tonumber(n) or 0
+  n = (n < 2) and 0 or math.floor(n + 0.5)
+  if reaper.SetExtState then reaper.SetExtState("ReaCat", "resolution", tostring(n), true) end
+  return n
 end
 
 -- Can this entry be reduced? (a curve with at least 3 points, all of them straight segments)
@@ -386,14 +388,14 @@ local function removalRanks(pts)
   return rank
 end
 
--- The entry with only pct % of its points (a copy; the hash and everything else stay, so the usage records still find it). Returns the entry
--- itself when pct is 100 or the entry cannot be reduced.
-function M.thin(e, pct)
-  pct = tonumber(pct) or 100
-  if pct >= 100 or not M.canThin(e) then return e end
+-- The entry with at most maxPoints points (a copy; the hash and everything else stay, so the usage records still find it). Returns the entry
+-- itself when maxPoints is 0 (no limit) or at least its number of points, or when the entry cannot be reduced.
+function M.thin(e, maxPoints)
+  maxPoints = tonumber(maxPoints) or 0
+  if maxPoints < 2 or not M.canThin(e) then return e end
   local pts = e.points
   local n = #pts
-  local keep = math.max(2, math.floor(n * pct / 100 + 0.5))
+  local keep = math.floor(maxPoints)
   if keep >= n then return e end
   local rank = e.hash and orderCache[e.hash .. ":" .. n]
   if not rank then
@@ -414,12 +416,12 @@ function M.thin(e, pct)
   return copy
 end
 
--- What a tool is handed when it takes this entry (by id, or an entry already read): the entry with the Detail setting applied.
+-- What a tool is handed when it takes this entry (by id, or an entry already read): the entry with the Resolution setting applied.
 function M.take(idOrEntry)
   local e = idOrEntry
   if type(idOrEntry) == "string" then e = M.get(idOrEntry) end
   if not e then return nil end
-  return M.thin(e, M.detail())
+  return M.thin(e, M.resolution())
 end
 
 function M.newest(source, name)
