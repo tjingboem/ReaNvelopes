@@ -333,6 +333,95 @@ function M.get(id)
   return e
 end
 
+-- ---- Detail: how many of the points of a curve a tool takes (26 Nov 2026, his request). The catalogue always keeps ALL the points of a curve;
+-- the setting (a percentage, shared by every tool, kept between sessions) only decides what a tool is handed when it takes one. The points that
+-- matter least to the shape go first (Visvalingam-Whyatt: the point whose triangle with its two neighbours is the smallest). Only a curve of
+-- straight segments can be reduced; a curve that has steps or curved segments is taken as it is (those have few points anyway).
+
+function M.detail()
+  local v = tonumber(reaper.GetExtState and reaper.GetExtState("ReaCat", "detail") or "")
+  if not v then return 100 end
+  return math.max(1, math.min(100, math.floor(v + 0.5)))
+end
+
+function M.setDetail(p)
+  p = math.max(1, math.min(100, math.floor((tonumber(p) or 100) + 0.5)))
+  if reaper.SetExtState then reaper.SetExtState("ReaCat", "detail", tostring(p), true) end
+  return p
+end
+
+-- Can this entry be reduced? (a curve with at least 3 points, all of them straight segments)
+function M.canThin(e)
+  if type(e) ~= "table" or e.kind ~= "curve" or type(e.points) ~= "table" or #e.points < 3 then return false end
+  for _, p in ipairs(e.points) do
+    if (p.shape or 0) ~= 0 then return false end
+  end
+  return true
+end
+
+local orderCache, orderCount = {}, 0
+
+-- rank[i] = in which turn point i goes (1 = the first to go); the two end points never go (rank nil)
+local function removalRanks(pts)
+  local n = #pts
+  local prev, nxt, area, alive = {}, {}, {}, {}
+  for i = 1, n do prev[i], nxt[i], alive[i] = i - 1, i + 1, true end
+  local function tri(a, b, c)
+    return math.abs((pts[b].t - pts[a].t) * (pts[c].v - pts[a].v) - (pts[c].t - pts[a].t) * (pts[b].v - pts[a].v)) / 2
+  end
+  for i = 2, n - 1 do area[i] = tri(i - 1, i, i + 1) end
+  local rank = {}
+  for turn = 1, n - 2 do
+    local best, bestA = nil, math.huge
+    for i = 2, n - 1 do
+      if alive[i] and area[i] < bestA then best, bestA = i, area[i] end
+    end
+    alive[best] = false
+    rank[best] = turn
+    local a, b = prev[best], nxt[best]
+    nxt[a], prev[b] = b, a
+    if a > 1 then area[a] = tri(prev[a], a, b) end
+    if b < n then area[b] = tri(a, b, nxt[b]) end
+  end
+  return rank
+end
+
+-- The entry with only pct % of its points (a copy; the hash and everything else stay, so the usage records still find it). Returns the entry
+-- itself when pct is 100 or the entry cannot be reduced.
+function M.thin(e, pct)
+  pct = tonumber(pct) or 100
+  if pct >= 100 or not M.canThin(e) then return e end
+  local pts = e.points
+  local n = #pts
+  local keep = math.max(2, math.floor(n * pct / 100 + 0.5))
+  if keep >= n then return e end
+  local rank = e.hash and orderCache[e.hash .. ":" .. n]
+  if not rank then
+    rank = removalRanks(pts)
+    if e.hash then
+      if orderCount > 200 then orderCache, orderCount = {}, 0 end
+      orderCache[e.hash .. ":" .. n] = rank
+      orderCount = orderCount + 1
+    end
+  end
+  local out = {}
+  for i = 1, n do
+    if rank[i] == nil or rank[i] > n - keep then out[#out + 1] = pts[i] end
+  end
+  local copy = {}
+  for k, v in pairs(e) do copy[k] = v end
+  copy.points, copy.npoints, copy.thinnedFrom = out, #out, n
+  return copy
+end
+
+-- What a tool is handed when it takes this entry (by id, or an entry already read): the entry with the Detail setting applied.
+function M.take(idOrEntry)
+  local e = idOrEntry
+  if type(idOrEntry) == "string" then e = M.get(idOrEntry) end
+  if not e then return nil end
+  return M.thin(e, M.detail())
+end
+
 function M.newest(source, name)
   for _, e in ipairs(M.list()) do                       -- newest first
     if e.source == source and e.name == name then return e.id end
