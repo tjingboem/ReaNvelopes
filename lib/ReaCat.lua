@@ -1173,4 +1173,95 @@ function M.sendToAutomationItems(idOrEntry)
 end
 
 
+-- ---- Send To MIDI CC: a curve into the CC lane last clicked in the MIDI editor (26 Nov 2026, his request)
+-- The lane (a CC 0..127, pitch bend or channel pressure) is the one last clicked in the open MIDI editor, the channel is the editor's channel for new
+-- notes. The curve goes over the TIME SELECTION when there is one, else over the whole item; the part that lies outside the item is cut off. The events
+-- of that lane and channel inside the range are REPLACED. The Resolution setting applies. One undo step; the item is recorded as a place where the curve
+-- is used (red border, select button). A step is written as a square event, a line as a linear one, slow / fast as REAPER's own shapes.
+local CC_LANE_KINDS = {
+  [0x201] = { name = "Pitch bend", chanmsg = 224, bits = 14 },
+  [0x203] = { name = "Channel pressure", chanmsg = 208, bits = 7 },
+}
+local REACAT_TO_CC_SHAPE = { [0] = 1, [1] = 0, [2] = 2, [3] = 3, [4] = 4 }     -- ReaCat's shapes -> REAPER's CC shapes (square 0, linear 1, slow 2, fast start 3, fast end 4)
+
+function M.sendToMidiCC(idOrEntry)
+  if not (reaper.MIDIEditor_GetActive and reaper.MIDI_InsertCC) then return 0, "this REAPER cannot write MIDI CC" end
+  local e = M.take(idOrEntry)
+  if not e then return 0, "no such curve" end
+  if e.kind ~= "curve" or not e.points or #e.points < 2 then return 0, "this is not a curve" end
+  local ed = reaper.MIDIEditor_GetActive()
+  if not ed then return 0, "open the item in the MIDI editor and click the CC lane first" end
+  local take = reaper.MIDIEditor_GetTake(ed)
+  if not take or not reaper.TakeIsMIDI(take) then return 0, "the MIDI editor has no MIDI take" end
+  local lane = reaper.MIDIEditor_GetSetting_int(ed, "last_clicked_cc_lane")
+  local ccNo, chanmsg, bits, name
+  if lane >= 0 and lane <= 127 then ccNo, chanmsg, bits, name = lane, 176, 7, "CC " .. lane
+  elseif CC_LANE_KINDS[lane] then
+    local k = CC_LANE_KINDS[lane]
+    chanmsg, bits, name = k.chanmsg, k.bits, k.name
+  else
+    return 0, "click a CC, pitch bend or channel pressure lane first (that lane kind is not supported)"
+  end
+  local chan = reaper.MIDIEditor_GetSetting_int(ed, "default_note_chan")
+  if type(chan) ~= "number" or chan < 0 or chan > 15 then chan = 0 end
+
+  local item = reaper.GetMediaItemTake_Item(take)
+  local ipos = reaper.GetMediaItemInfo_Value(item, "D_POSITION")
+  local iend = ipos + reaper.GetMediaItemInfo_Value(item, "D_LENGTH")
+  local s, f = reaper.GetSet_LoopTimeRange(false, false, 0, 0, false)
+  if not (s and f and f > s) then s, f = ipos, iend end
+  s, f = math.max(s, ipos), math.min(f, iend)                         -- what lies outside the item is not part of it
+  if not (f > s) then return 0, "the time selection lies outside the item" end
+
+  local pts = envelopePoints(e.points)
+  local maxv = (bits == 14) and 16383 or 127
+  local function ppqOf(t) return math.floor(reaper.MIDI_GetPPQPosFromProjTime(take, t) + 0.5) end
+  local first, last = ppqOf(s), ppqOf(f)
+
+  reaper.Undo_BeginBlock()
+  if reaper.PreventUIRefresh then reaper.PreventUIRefresh(1) end
+  if reaper.MIDI_DisableSort then reaper.MIDI_DisableSort(take) end
+  -- replace what is there: the events of this lane and channel inside the range
+  local _, _, ncc = reaper.MIDI_CountEvts(take)
+  for i = ncc - 1, 0, -1 do
+    local ok, _, _, ppq, cm, ch, m2 = reaper.MIDI_GetCC(take, i)
+    if ok and cm == chanmsg and ch == chan and (ccNo == nil or m2 == ccNo) and ppq >= first - 0.5 and ppq <= last + 0.5 then reaper.MIDI_DeleteCC(take, i) end
+  end
+  local want, written, lastPpq = {}, 0, nil
+  for _, p in ipairs(pts) do
+    local ppq = ppqOf(s + math.min(p.t, 1) * (f - s))
+    if ppq ~= lastPpq then                                              -- two events never share a tick
+      local v = math.floor(math.max(0, math.min(1, p.v)) * maxv + 0.5)
+      local m2, m3
+      if chanmsg == 176 then m2, m3 = ccNo, v
+      elseif bits == 14 then m2, m3 = v & 127, v >> 7
+      else m2, m3 = v, 0 end
+      reaper.MIDI_InsertCC(take, false, false, ppq, chanmsg, chan, m2, m3)
+      want[ppq .. ":" .. chanmsg .. ":" .. (ccNo or "")] = REACAT_TO_CC_SHAPE[p.shape or 0] or 1
+      written, lastPpq = written + 1, ppq
+    end
+  end
+  reaper.MIDI_Sort(take)
+  if reaper.MIDI_SetCCShape then                                        -- the shape of the events just written, found again by position
+    local _, _, n2 = reaper.MIDI_CountEvts(take)
+    for i = 0, n2 - 1 do
+      local ok, _, _, ppq, cm, ch, m2 = reaper.MIDI_GetCC(take, i)
+      if ok and ch == chan and cm == chanmsg then
+        local shape = want[math.floor(ppq + 0.5) .. ":" .. cm .. ":" .. (ccNo and m2 or "")]
+        if shape then reaper.MIDI_SetCCShape(take, i, shape, 0, true) end
+      end
+    end
+    reaper.MIDI_Sort(take)
+  end
+  if reaper.PreventUIRefresh then reaper.PreventUIRefresh(-1) end
+  if reaper.UpdateItemInProject then reaper.UpdateItemInProject(item) end
+  reaper.Undo_EndBlock("ReaCat: curve to MIDI CC", -1)
+
+  local ig = ""
+  for _, v in ipairs({ reaper.GetSetMediaItemInfo_String(item, "GUID", "", false) }) do if type(v) == "string" then ig = v end end
+  if ig ~= "" then M.useAdd{ hash = e.hash, what = "item", guid = ig, tool = "ReaCat", label = "MIDI CC " .. tostring(e.source) .. " " .. tostring(e.name) } end
+  return written, string.format("%s: %d events into %s (channel %d)", e.name, written, name, chan + 1)
+end
+
+
 return M
