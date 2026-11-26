@@ -1012,4 +1012,165 @@ function M.query(text)
   return function(h) return evalNode(tree, h, used) end
 end
 
+-- ---- Send To Automation Item: a curve into the selected automation item(s) (26 Nov 2026, his request)
+-- The points of the automation item are REPLACED by the curve (with the Resolution setting applied), stretched over the item's length and scaled to the
+-- envelope's own range (the same mapping as ReaNvelopes' envelope output: PARM_MIN/PARM_MAX, then the chunk's MINVAL/MAXVAL, fader scaling for a volume
+-- envelope). One undo step. The automation item is then recorded as a place where the curve is used (the red border).
+
+-- (lo, hi, mode) of an envelope; mode is REAPER's scaling mode (1 = fader)
+local function envelopeRange(env)
+  local mode = reaper.GetEnvelopeScalingMode and reaper.GetEnvelopeScalingMode(env) or 0
+  if mode == 1 then return 0.0, 1.0, mode end
+  local pmin = reaper.GetEnvelopeInfo_Value and reaper.GetEnvelopeInfo_Value(env, "PARM_MIN")
+  local pmax = reaper.GetEnvelopeInfo_Value and reaper.GetEnvelopeInfo_Value(env, "PARM_MAX")
+  if pmin and pmax and (pmax - pmin) > 1e-9 then return pmin, pmax, mode end
+  local ok, chunk = reaper.GetEnvelopeStateChunk(env, "", false)
+  if ok and chunk then
+    local mn = tonumber(chunk:match("\nMINVAL ([%-%.%d]+)"))
+    local mx = tonumber(chunk:match("\nMAXVAL ([%-%.%d]+)"))
+    if mn and mx and (mx - mn) > 1e-9 then return mn, mx, mode end
+    local a, b = chunk:match("<PARMENV%s+%S+%s+([%-%d%.eE]+)%s+([%-%d%.eE]+)")
+    a, b = tonumber(a), tonumber(b)
+    if a and b and b > a then return a, b, mode end
+  end
+  return 0.0, 1.0, mode
+end
+
+-- A fader scaled envelope (volume) keeps its point values in REAPER's fader units (0 = silence ... 1000; 0 dB = 716.2), the units its lane is drawn in,
+-- so a curve is written as fraction * the top of the lane in those units. The top of the lane is the maximum of the volume envelope range, a REAPER
+-- preference ("volenvrange" in reaper.ini: 0 and 2 = 2x, 1 and 3 = 1x, 4 and 6 = 4x (+12 dB), 5 and 7 = 16x), turned into fader units.
+local VOL_MAX = { [0] = 2, [1] = 1, [2] = 2, [3] = 1, [4] = 4, [5] = 16, [6] = 4, [7] = 16 }
+local function faderTop()
+  local range
+  if reaper.SNM_GetIntConfigVar then
+    local ok, v = pcall(reaper.SNM_GetIntConfigVar, "volenvrange", -1)
+    if ok and type(v) == "number" and v >= 0 then range = v end
+  end
+  if not range then
+    local okp, path = pcall(function() return reaper.get_ini_file and reaper.get_ini_file() end)
+    if okp and path then
+      local f = io.open(path, "rb")
+      if f then
+        local txt = f:read("a") f:close()
+        range = tonumber(txt:match("\nvolenvrange=(%-?%d+)"))
+      end
+    end
+  end
+  local maxAmp = VOL_MAX[range or -1] or 2
+  local top = 1000.0
+  if reaper.ScaleToEnvelopeMode then
+    local ok2, d = pcall(reaper.ScaleToEnvelopeMode, 1, maxAmp)
+    if ok2 and type(d) == "number" and d > 0 then top = d end
+  end
+  return top
+end
+
+local function toEnvelopeValue(v, lo, hi, mode)
+  if v < 0 then v = 0 elseif v > 1 then v = 1 end         -- the handles of a cubic segment may swing past 0..1; a lane has no room beyond its ends
+  if mode == 1 then return v * faderTop() end
+  if mode == 0 or not reaper.ScaleToEnvelopeMode then return lo + v * (hi - lo) end
+  return reaper.ScaleToEnvelopeMode(mode, lo + v * (hi - lo))
+end
+
+-- Points {t,v,shape} for the envelope: a cubic segment (shape 5) becomes small straight pieces; shapes 0..4 are REAPER's own (line, step, slow, fast start, fast end).
+local function envelopePoints(points)
+  local out = {}
+  for i, p in ipairs(points) do
+    local sh = p.shape or 0
+    local nx = points[i + 1]
+    if sh == 5 and nx and p.c1 and p.c2 then
+      out[#out + 1] = { t = p.t, v = p.v, shape = 0 }
+      local STEPS = 12
+      for k = 1, STEPS - 1 do
+        local u = k / STEPS
+        local w = 1 - u
+        out[#out + 1] = { t = p.t + (nx.t - p.t) * u, shape = 0,
+                          v = w * w * w * p.v + 3 * w * w * u * p.c1 + 3 * w * u * u * p.c2 + u * u * u * nx.v }
+      end
+    else
+      out[#out + 1] = { t = p.t, v = p.v, shape = (sh == 5) and 0 or sh }
+    end
+  end
+  return out
+end
+
+local function guidOf(env)
+  for _, v in ipairs({ reaper.GetSetEnvelopeInfo_String(env, "GUID", "", false) }) do if type(v) == "string" then return v end end
+  return ""
+end
+
+-- The selected automation items of the project: { { env =, idx =, track = } ... }
+local function selectedAutomationItems()
+  local out = {}
+  local tracks = { reaper.GetMasterTrack(0) }
+  for i = 0, reaper.CountTracks(0) - 1 do tracks[#tracks + 1] = reaper.GetTrack(0, i) end
+  for _, tr in ipairs(tracks) do
+    for k = 0, reaper.CountTrackEnvelopes(tr) - 1 do
+      local env = reaper.GetTrackEnvelope(tr, k)
+      for a = 0, reaper.CountAutomationItems(env) - 1 do
+        if reaper.GetSetAutomationItemInfo(env, a, "D_UISEL", 0, false) ~= 0 then out[#out + 1] = { env = env, idx = a, track = tr } end
+      end
+    end
+  end
+  return out
+end
+
+-- Returns the number of automation items written and a message (never raises). id: the entry's id (or an entry already read).
+function M.sendToAutomationItems(idOrEntry)
+  if not (reaper.GetMasterTrack and reaper.CountAutomationItems and reaper.InsertEnvelopePointEx) then return 0, "this REAPER cannot write automation items" end
+  local e = M.take(idOrEntry)
+  if not e then return 0, "no such curve" end
+  if e.kind ~= "curve" or not e.points or #e.points < 2 then return 0, "this is not a curve" end
+  local sel = selectedAutomationItems()
+  if #sel == 0 then return 0, "select an automation item in REAPER first" end
+  local pts = envelopePoints(e.points)
+  local written, last = 0, ""
+  reaper.Undo_BeginBlock()
+  if reaper.PreventUIRefresh then reaper.PreventUIRefresh(1) end
+  for _, t in ipairs(sel) do
+    local env, ai = t.env, t.idx
+    local len = reaper.GetSetAutomationItemInfo(env, ai, "D_LENGTH", 0, false)
+    local pos = reaper.GetSetAutomationItemInfo(env, ai, "D_POSITION", 0, false)
+    if len and len > 0 and pos then
+      local lo, hi, mode = envelopeRange(env)
+      local rate = reaper.GetSetAutomationItemInfo(env, ai, "D_PLAYRATE", 0, false)
+      local off = reaper.GetSetAutomationItemInfo(env, ai, "D_STARTOFFS", 0, false) or 0
+      if not rate or rate <= 0 then rate = 1 end
+      -- The time of a point of an automation item is PROJECT time in REAPER (a point before the item's start is not part of the item and is not counted).
+      -- Should the count of the points in the item not come out right, the same is tried once with times counted from the item's own start.
+      local function write(timeOf)
+        reaper.DeleteEnvelopePointRangeEx(env, ai, -1e9, 1e9)
+        for _, p in ipairs(pts) do
+          reaper.InsertEnvelopePointEx(env, ai, timeOf(p), toEnvelopeValue(p.v, lo, hi, mode), p.shape or 0, 0, false, true)
+        end
+        reaper.Envelope_SortPointsEx(env, ai)
+        return reaper.CountEnvelopePointsEx(env, ai)
+      end
+      local EDGE = 1 - 1e-5      -- the last point a hair inside the item (a point on the very end may not count as part of it)
+      local function absTime(p) return pos + math.min(p.t, EDGE) * len end
+      local function relTime(p) return off + math.min(p.t, EDGE) * len * rate end
+      local have = write(absTime)
+      if have ~= #pts then
+        local haveB = write(relTime)
+        if haveB < have then haveB = nil have = write(absTime) else have = haveB end
+      end
+      if have >= #pts - 1 and have >= 2 then
+        written = written + 1
+        local _, envName = reaper.GetEnvelopeName(env)
+        last = tostring(envName or "")
+        M.useAdd{ hash = e.hash, what = "ai", guid = "ai:" .. guidOf(env) .. ":" .. tostring(ai), tool = "ReaCat",
+                  label = "Automation Item " .. tostring(e.source) .. " " .. tostring(e.name) }
+      end
+    end
+  end
+  if reaper.PreventUIRefresh then reaper.PreventUIRefresh(-1) end
+  reaper.UpdateArrange()
+  reaper.Undo_EndBlock("ReaCat: curve to automation item", -1)
+  if written == 0 then return 0, "could not write the curve into the automation item" end
+  local msg = string.format("%s: %d points into %d automation item%s", e.name, #pts, written, written == 1 and "" or "s")
+  if written < #sel then msg = msg .. string.format(" (%d could not be written)", #sel - written) end
+  return written, msg
+end
+
+
 return M
