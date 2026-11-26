@@ -18,6 +18,10 @@ reaper = {
   GetExtState = function(s, k) return ext[s .. "/" .. k] or "" end,
   SetExtState = function(s, k, v) ext[s .. "/" .. k] = v end,
   GetProjectName = function() return "Night Piece.RPP" end,
+  GetProjExtState = function(_, sec, k) local v = ext["proj/" .. sec .. "/" .. k] return v and 1 or 0, v or "" end,
+  SetProjExtState = function(_, sec, k, v) ext["proj/" .. sec .. "/" .. k] = (v ~= "") and v or nil return 0 end,
+  MarkProjectDirty = function() end,
+  genGuid = function() return "{TEST-PROJECT-ID}" end,
 }
 local Send = require("ReaCatSend")
 local Cat = require("ReaCat")
@@ -74,6 +78,12 @@ check("the same curve again is not stored twice", #Cat.list() == before)
 -- a name without a colon
 local ok5, _, id5 = Send.send(stairs, true, "Something", nil)
 check("a name without a tool part", ok5 and Cat.get(id5).source == "ReaNvelopes" and Cat.get(id5).name == "Something")
+
+-- what is sent is marked as used in this project (red border in ReaCat)
+local sentEntry = Cat.get(id)
+check("a sent curve is marked as used in this project", Cat.usedHashes()[sentEntry.hash] == 1, tostring(Cat.usedHashes()[sentEntry.hash]))
+local by = Cat.usedBy(sentEntry.hash)
+check("its place is 'in ReaNvelopes' (a parameter)", by[1] and by[1].what == "param" and by[1].tool == "ReaNvelopes", by[1] and by[1].what)
 
 os.execute("rm -rf '" .. root .. "'")
 print(string.format("%d checks passed, %d failed", passed, failed))

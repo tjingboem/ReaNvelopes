@@ -44,6 +44,12 @@ function M.send(points, hold, name, control)
   local source, short = splitName(name)
   local id, err = ReaCat.send{ kind = "curve", source = source, name = short, points = pointsOf(text) }
   if not id then return false, err end
+  -- What is sent comes out of this project, so ReaCat shows where it is used (red border, "used in this project: ReaNvelopes: in ReaNvelopes").
+  local entry = ReaCat.get(id)
+  if entry and entry.hash and ReaCat.useAdd then
+    pcall(ReaCat.useAdd, { hash = entry.hash, what = "param", guid = "send/" .. tostring(source) .. "/" .. tostring(short), tool = "ReaNvelopes",
+                           label = tostring(source) .. " " .. tostring(short) })
+  end
   return true, n, id
 end
 
