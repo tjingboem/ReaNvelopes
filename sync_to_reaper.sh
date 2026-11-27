@@ -7,5 +7,6 @@ rsync -av --delete \
   --filter='P OSCPresets/***' --filter='P RANDPresets/***' --filter='P DRAWPresets/***' \
   --exclude='.git' \
   --exclude='doc' \
-  --exclude='sync_to_reaper.sh' \
+  --exclude='sync_to_reaper.sh' --exclude='toolbar_icons' \
   ~/Claude/ReaNvelopes/ /home/tjingboem/.config/REAPER/Scripts/tjingboem/ReaNvelopes/
+mkdir -p ~/.config/REAPER/Data/toolbar_icons && cp ~/Claude/ReaNvelopes/toolbar_icons/*.png ~/.config/REAPER/Data/toolbar_icons/   # toolbar icon (90x30, 3 states)
