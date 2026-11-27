@@ -45,6 +45,23 @@ function M.writeItemState(item, state)
   return ok
 end
 
+-- BEGIN REASNAP-CLAIM (same in every tool: canonical copy in ReaSnap/tools/claim_snippet.lua; tools/test_claim_offline.lua checks the copies)
+-- A tool opened without ReaSnap's Launcher (Actions list, toolbar) takes its instance number and project identity itself, but ONLY
+-- while ReaSnap's Browser is running (its heartbeat is fresh). Without ReaSnap it does nothing: no dependency, plain window title.
+do
+  local tool = "ReaNvelopes"
+  local S = "ReaSculpt_Registry"
+  local alive = tonumber(reaper.GetExtState(S, "reasnap_alive"))
+  if reaper.GetExtState(S, "pending_" .. tool .. "_instance_number") == "" and alive and reaper.time_precise() - alive < 2 then
+    local _, cur = reaper.GetProjExtState(0, "ReaSnap_ScriptInstances", tool .. "_next_number")
+    local n = (tonumber(cur) or 0) + 1
+    reaper.SetProjExtState(0, "ReaSnap_ScriptInstances", tool .. "_next_number", tostring(n))
+    reaper.SetExtState(S, "pending_" .. tool .. "_instance_number", tostring(n), false)
+    reaper.SetExtState(S, "pending_" .. tool .. "_project_identity", reaper.GetProjectPath("") .. "/" .. reaper.GetProjectName(0, ""), false)
+  end
+end
+-- END REASNAP-CLAIM
+
 -- Piece 2: instance number, put there by ReaSnap's launcher (read once, then cleared).
 M.instance_number = nil
 if reaper.HasExtState("ReaSculpt_Registry", "pending_" .. TOOL_NAME .. "_instance_number") then
